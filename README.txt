@@ -1,21 +1,20 @@
-APOIO — MVP v2
+APOIO — MVP V3
 
-Versao de demonstracao para GitHub Pages.
+Versão de protótipo para GitHub Pages.
 
-Novidades:
-- cadastro e login local (somente no aparelho)
-- acesso de demonstracao
-- nome dinamico do usuario
-- central de notificacoes
-- lista completa de pedidos
-- detalhes dos pedidos
-- contribuicao simulada com taxa
-- criacao de pedido
-- historico por usuario
-- perfil com limites mensais e intervalo entre pedidos
-- aviso de contribuicao voluntaria e ausencia de emprestimo
-- persistencia local via localStorage
+Novidades da V3:
+- fluxo de contribuição completo (simulado)
+- tela de detalhes do pedido
+- fluxo de criação de pedido em 3 etapas
+- histórico com filtros Todos / Ajudei / Recebi
+- central de notificações
+- edição do nome no perfil
+- botão de teste para liberar novo pedido no usuário demo
+- prevenção de contribuição no próprio pedido
+- toast de confirmação em vez de depender apenas de alertas
+- migração automática dos dados locais da V2
+- service worker atualizado para reduzir problemas de cache
 
 IMPORTANTE:
-Este MVP nao possui banco de dados remoto, KYC real, Pix ou pagamentos reais.
-Nao use dados pessoais reais sensiveis no prototipo.
+Este é apenas um protótipo. Não há pagamentos reais, KYC real, banco de dados remoto ou autenticação segura.
+Não use dados pessoais sensíveis.

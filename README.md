@@ -1,34 +1,11 @@
-# Apoio — MVP
+# Apoio — MVP v3
 
-Protótipo demonstrativo da plataforma de apoio financeiro colaborativo.
+Protótipo mobile-first de uma plataforma colaborativa para pedidos de apoio financeiro de pequeno valor.
 
-## Publicar gratuitamente no GitHub Pages
+## Teste
 
-1. Entre em https://github.com e crie uma conta, caso ainda não tenha.
-2. Clique em **New repository**.
-3. Nome sugerido: `apoio-mvp`.
-4. Deixe como **Public** e clique em **Create repository**.
-5. Clique em **uploading an existing file**.
-6. Envie TODOS os arquivos e pastas deste pacote, mantendo `index.html` na raiz.
-7. Clique em **Commit changes**.
-8. Abra **Settings > Pages**.
-9. Em **Build and deployment**, escolha **Deploy from a branch**.
-10. Em **Branch**, selecione `main` e `/ (root)`, depois **Save**.
-11. O GitHub exibirá o endereço público do site.
+Publique os arquivos na raiz de um repositório GitHub Pages e abra o endereço do Pages no navegador.
 
-Normalmente o endereço terá o formato:
+## Aviso
 
-`https://SEU-USUARIO.github.io/apoio-mvp/`
-
-## Instalar no iPhone
-
-1. Abra o link no Safari.
-2. Toque em **Compartilhar**.
-3. Escolha **Adicionar à Tela de Início**.
-4. Confirme em **Adicionar**.
-
-O ícone **Apoio** aparecerá na tela inicial.
-
-## Atenção
-
-Este MVP não processa pagamentos reais e não possui backend. Cadastro, contribuições e pedidos são apenas simulados para validação da experiência e das regras do produto.
+Este MVP usa `localStorage`. Nenhum pagamento real é processado e não há autenticação, KYC ou banco de dados remoto.
