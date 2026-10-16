@@ -1,12 +1,14 @@
-const STORAGE_KEY='somma_mvp_v36_state';
-const LEGACY_STORAGE_KEY='somma_mvp_v35_state';
+const STORAGE_KEY='somma_mvp_v37_state';
+const LEGACY_STORAGE_KEY='somma_mvp_v36_state';
+const LEGACY_STORAGE_KEY_V35='somma_mvp_v35_state';
 const LEGACY_STORAGE_KEY_V34='somma_mvp_v34_state';
 const LEGACY_STORAGE_KEY_SOMMA_V34='apoio_mvp_v33_state';
 const LEGACY_STORAGE_KEY_2='apoio_mvp_v32_state';
 const LEGACY_STORAGE_KEY_OLD='apoio_mvp_v3_state';
 const LEGACY_STORAGE_KEY_V2='apoio_mvp_v2_state';
-const SESSION_KEY='somma_mvp_v36_session';
-const LEGACY_SESSION_KEY='somma_mvp_v35_session';
+const SESSION_KEY='somma_mvp_v37_session';
+const LEGACY_SESSION_KEY='somma_mvp_v36_session';
+const LEGACY_SESSION_KEY_V35='somma_mvp_v35_session';
 const LEGACY_SESSION_KEY_V34='somma_mvp_v34_session';
 const LEGACY_SESSION_KEY_SOMMA_V34='apoio_mvp_v33_session';
 const LEGACY_SESSION_KEY_2='apoio_mvp_v32_session';
@@ -46,6 +48,33 @@ const toastEl=document.querySelector('#toast');
 const brl=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const feeFor=v=>Math.round((0.20+Number(v)*0.05)*100)/100;
 
+const LEVELS={
+  initial:{key:'initial',name:'Inicial',limitPerRequest:50,monthlyLimit:150,description:'Primeiros passos na comunidade.'},
+  verified:{key:'verified',name:'Verificado',limitPerRequest:100,monthlyLimit:300,description:'Identidade validada e conta regular.'},
+  community:{key:'community',name:'Comunidade',limitPerRequest:150,monthlyLimit:450,description:'Bom histórico de uso e participação.'},
+  trusted:{key:'trusted',name:'Confiável',limitPerRequest:200,monthlyLimit:600,description:'Histórico consistente e sem ocorrências.'},
+  special:{key:'special',name:'Especial',limitPerRequest:300,monthlyLimit:null,description:'Faixa excepcional, sujeita a análise individual.'}
+};
+const LEVEL_ORDER=['initial','verified','community','trusted','special'];
+function levelInfo(u){
+  const key=(u&&LEVELS[u.level])?u.level:(u?.verified?'verified':'initial');
+  return LEVELS[key];
+}
+function nextLevelInfo(u){
+  const current=levelInfo(u);const i=LEVEL_ORDER.indexOf(current.key);
+  return i>=0&&i<LEVEL_ORDER.length-1?LEVELS[LEVEL_ORDER[i+1]]:null;
+}
+function normalizeUserProgression(u){
+  if(!u)return u;
+  if(!u.level||!LEVELS[u.level])u.level=u.verified?'verified':'initial';
+  if(u.verified&&u.level==='initial')u.level='verified';
+  const info=LEVELS[u.level];
+  u.limitPerRequest=info.limitPerRequest;
+  if(info.monthlyLimit!=null)u.monthlyLimit=info.monthlyLimit;
+  else if(!Number(u.monthlyLimit))u.monthlyLimit=600;
+  return u;
+}
+
 function cloneDefault(){return JSON.parse(JSON.stringify(defaultState));}
 function migratePublishedRequests(data){
   if(!data||!Array.isArray(data.history))return;
@@ -66,13 +95,15 @@ function migratePublishedRequests(data){
 }
 function loadState(){
   try{
-    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_2)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
+    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_V35)||localStorage.getItem(LEGACY_STORAGE_KEY_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_2)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
     const saved=raw?JSON.parse(raw):null;
     if(saved && saved.requests){
       if(saved.user && saved.user.email==='demo@apoio.local') saved.user.email='demo@somma.local';
       if(Array.isArray(saved.users)) saved.users.forEach(u=>{if(u.email==='demo@apoio.local') u.email='demo@somma.local';});
       const merged={...cloneDefault(),...saved,historyTab:'all',requestStep:1,requestDraft:{value:'',category:'',description:'',time:'48 horas'},activeRequest:null,selectedAmount:0};
       migratePublishedRequests(merged);
+      if(Array.isArray(merged.users))merged.users.forEach(normalizeUserProgression);
+      if(merged.user)normalizeUserProgression(merged.user);
       return merged;
     }
   }catch(e){}
@@ -83,7 +114,7 @@ function saveState(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(safe));
 }
 function setSession(email){localStorage.setItem(SESSION_KEY,email||'');}
-function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_V34)||localStorage.getItem(LEGACY_SESSION_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_SESSION_KEY_2)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
+function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_V35)||localStorage.getItem(LEGACY_SESSION_KEY_V34)||localStorage.getItem(LEGACY_SESSION_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_SESSION_KEY_2)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function toast(message){
   if(!toastEl)return;
@@ -105,7 +136,7 @@ function init(){
 function makeDemoUser(){
   let demo=state.users.find(u=>u.email==='demo@somma.local');
   if(!demo){
-    demo={id:'demo-user',name:'Paula',email:'demo@somma.local',password:'demo',verified:true,helped:18,received:2,contributed:74,receivedMonth:50,limitPerRequest:100,monthlyLimit:300,nextRequestDays:3,joined:'Outubro de 2026'};
+    demo={id:'demo-user',name:'Paula',email:'demo@somma.local',password:'demo',verified:true,level:'verified',helped:18,received:2,contributed:74,receivedMonth:50,limitPerRequest:100,monthlyLimit:300,nextRequestDays:3,joined:'Outubro de 2026'};
     state.users.push(demo);saveState();
   }
   return demo;
@@ -114,9 +145,11 @@ function currentUser(){
   if(!state.user)return null;
   const stored=state.users.find(u=>u.id===state.user.id);
   if(stored)state.user=stored;
+  normalizeUserProgression(state.user);
   return state.user;
 }
 function syncUser(){
+  normalizeUserProgression(state.user);
   const i=state.users.findIndex(u=>u.id===state.user.id);
   if(i>=0)state.users[i]=state.user;else state.users.push(state.user);
   saveState();
@@ -184,7 +217,7 @@ function renderRequest(){
   const step=state.requestStep||1;
   const stepLabel=`Etapa ${step} de 3`;
   if(step===1){
-    app.innerHTML=`<div class="content"><div class="stepper"><span class="active"></span><span></span><span></span></div><p class="eyebrow">${stepLabel}</p><h2 class="flow-title">Defina sua necessidade</h2><div class="request-limit-highlight"><span>Seu limite atual por pedido</span><strong>${brl(u.limitPerRequest)}</strong><small>Disponível no período: ${brl(Math.max(0,u.monthlyLimit-(u.receivedMonth||0)))}</small></div><div class="notice">Valor mínimo de R$ 20. O pedido também deve respeitar seu limite mensal de ${brl(u.monthlyLimit)}.</div><form class="form-card" id="request-step-1"><label class="field">Quanto você precisa?<input id="req-value" type="number" min="20" max="${u.limitPerRequest}" step="1" inputmode="decimal" value="${escapeHtml(d.value)}" placeholder="Ex.: 50" required></label><label class="field">Categoria<select id="req-category" required><option value="">Selecione</option>${['Combustível','Alimentação','Transporte','Medicamentos','Conta essencial','Emergência','Outro'].map(c=>`<option ${d.category===c?'selected':''}>${c}</option>`).join('')}</select></label><button class="btn btn-primary full">Continuar</button></form></div>`;
+    app.innerHTML=`<div class="content"><div class="stepper"><span class="active"></span><span></span><span></span></div><p class="eyebrow">${stepLabel}</p><h2 class="flow-title">Defina sua necessidade</h2><div class="request-limit-highlight"><span>Nível ${escapeHtml(levelInfo(u).name)} · limite por pedido</span><strong>${brl(u.limitPerRequest)}</strong><small>Disponível no período: ${brl(Math.max(0,u.monthlyLimit-(u.receivedMonth||0)))}</small></div><div class="notice">Valor mínimo de R$ 20. O pedido também deve respeitar seu limite mensal de ${brl(u.monthlyLimit)}.</div><form class="form-card" id="request-step-1"><label class="field">Quanto você precisa?<input id="req-value" type="number" min="20" max="${u.limitPerRequest}" step="1" inputmode="decimal" value="${escapeHtml(d.value)}" placeholder="Ex.: 50" required></label><label class="field">Categoria<select id="req-category" required><option value="">Selecione</option>${['Combustível','Alimentação','Transporte','Medicamentos','Conta essencial','Emergência','Outro'].map(c=>`<option ${d.category===c?'selected':''}>${c}</option>`).join('')}</select></label><button class="btn btn-primary full">Continuar</button></form></div>`;
   }else if(step===2){
     app.innerHTML=`<div class="content"><div class="stepper"><span class="active"></span><span class="active"></span><span></span></div><p class="eyebrow">${stepLabel}</p><h2 class="flow-title">Conte o essencial</h2><form class="form-card" id="request-step-2"><label class="field">Descreva sua necessidade<textarea id="req-description" maxlength="180" placeholder="Explique sua necessidade de forma objetiva." required>${escapeHtml(d.description)}</textarea><span class="tiny muted"><span id="desc-count">${String(d.description||'').length}</span>/180 · Evite dados pessoais, endereço ou documentos.</span></label><label class="field">Prazo<select id="req-time"><option ${d.time==='24 horas'?'selected':''}>24 horas</option><option ${d.time==='48 horas'?'selected':''}>48 horas</option></select></label><div class="two-actions"><button type="button" class="btn btn-secondary" id="request-back-1">Voltar</button><button class="btn btn-primary">Continuar</button></div></form></div>`;
   }else{
@@ -213,10 +246,18 @@ function renderProfile(){
   const u=currentUser();pageTitle.textContent='Perfil';
   const available=Math.max(0,u.monthlyLimit-(u.receivedMonth||0));
   const pct=Math.min(100,((u.receivedMonth||0)/u.monthlyLimit)*100);
+  const current=levelInfo(u),next=nextLevelInfo(u);
+  const levelsHtml=LEVEL_ORDER.map(key=>{
+    const l=LEVELS[key],active=l.key===current.key;
+    const monthly=l.monthlyLimit==null?'Sob análise':brl(l.monthlyLimit);
+    return `<div class="level-row ${active?'active':''}"><div><strong>${escapeHtml(l.name)}</strong><span>${escapeHtml(l.description)}</span></div><div class="level-values"><strong>${l.key==='special'?'Até '+brl(l.limitPerRequest):brl(l.limitPerRequest)}</strong><span>${monthly}/mês</span></div></div>`;
+  }).join('');
   app.innerHTML=`<div class="content">
     <section class="card profile-hero"><div class="profile-avatar">${userInitial()}</div><h2>${escapeHtml(u.name)}</h2><p class="success">${u.verified?'✓ Identidade verificada':'○ Verificação pendente'}</p><p class="muted">Membro desde ${escapeHtml(u.joined||'2026')}</p></section>
     <div class="stats"><div class="stat"><strong>${u.helped}</strong><span>ajudou</span></div><div class="stat"><strong>${u.received}</strong><span>recebeu</span></div><div class="stat"><strong>${brl(u.contributed)}</strong><span>contribuiu</span></div></div>
+    <section class="card progression-card"><div class="row between progression-head"><div><span class="tiny muted">Seu nível atual</span><h2>${escapeHtml(current.name)}</h2></div><span class="level-chip">${brl(current.limitPerRequest)} por pedido</span></div><p class="muted progression-copy">${escapeHtml(current.description)}</p>${next?`<div class="next-level"><span>Próximo nível</span><strong>${escapeHtml(next.name)}</strong><small>${next.key==='special'?'Até '+brl(next.limitPerRequest)+' por pedido · análise individual':brl(next.limitPerRequest)+' por pedido · '+brl(next.monthlyLimit)+' por mês'}</small></div>`:''}<p class="legal-note top-mini">A progressão considera identidade, tempo de uso, histórico, segurança e comportamento na comunidade. Contribuir não cria obrigação de receber nem garante mudança de nível.</p></section>
     <section class="card"><div class="section-head no-margin"><h2>Seus limites</h2></div><div class="limit-row"><span>Por pedido</span><strong>${brl(u.limitPerRequest)}</strong></div><div class="limit-row"><span>Recebido neste período</span><strong>${brl(u.receivedMonth||0)} / ${brl(u.monthlyLimit)}</strong></div><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted">Ainda disponível no período: ${brl(available)}</div><div class="limit-row divider"><span>Próximo pedido</span><strong>${u.nextRequestDays>0?`Em ${u.nextRequestDays} dias`:'Disponível agora'}</strong></div></section>
+    <section class="card level-map-card"><div class="section-head no-margin"><div><h2>Progressão da Somma</h2><p class="tiny muted">Limites crescem gradualmente conforme a confiança na conta.</p></div></div><div class="level-list">${levelsHtml}</div></section>
     <section class="card"><div class="section-head no-margin"><h2>Dados do perfil</h2></div><form id="profile-form"><label class="field">Nome<input id="profile-name" maxlength="40" value="${escapeHtml(u.name)}" required></label><label class="field">E-mail<input value="${escapeHtml(u.email)}" disabled></label><button class="btn btn-secondary full">Salvar nome</button></form></section>
     <div class="list"><button class="list-button" id="profile-notifications" onclick="window.Somma.openNotifications()"><span>Notificações</span><strong>›</strong></button><button class="list-button" id="logout-btn"><span>Sair do protótipo</span><strong>›</strong></button><button class="list-button danger" id="reset-btn"><span>Apagar dados locais do MVP</span><strong>›</strong></button></div>
   </div>`;
@@ -230,7 +271,7 @@ function renderDetailPage(){
   app.innerHTML=`<div class="content">
     <button type="button" class="back-link" onclick="window.Somma.back()">‹ Voltar</button>
     <section class="card detail-page">
-      <div class="row between"><div class="row"><div class="avatar large">${escapeHtml((publicName(r.name)||'U')[0])}</div><div><h2>${escapeHtml(r.name)}</h2><div class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</div></div></div><span class="pill">${escapeHtml(r.category)}</span></div>
+      <div class="row between"><div class="row"><div class="avatar large">${escapeHtml((publicName(r.name)||'U')[0])}</div><div><h2>${escapeHtml(publicName(r.name))}</h2><div class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</div></div></div><span class="pill">${escapeHtml(r.category)}</span></div>
       <p class="detail-description">${escapeHtml(r.description)}</p>
       <div class="progress"><div style="width:${pct}%"></div></div>
       <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
@@ -341,7 +382,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#notify-btn')||e.target.closest('#profile-notifications')){openNotifications();return;}
   if(e.target.closest('#mark-read')||e.target.closest('#mark-read-page')){state.notifications.forEach(n=>n.read=true);saveState();updateBadge();if(state.view==='notifications')renderNotificationsPage();return;}
   if(e.target.closest('#logout-btn')){logout();return;}
-  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_OLD);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_V34);localStorage.removeItem(LEGACY_SESSION_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_SESSION_KEY_OLD);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
+  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_V35);localStorage.removeItem(LEGACY_STORAGE_KEY_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_OLD);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_V35);localStorage.removeItem(LEGACY_SESSION_KEY_V34);localStorage.removeItem(LEGACY_SESSION_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_SESSION_KEY_OLD);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
   if(e.target.closest('#demo-access')){state.user=makeDemoUser();setSession(state.user.email);state.history=state.history.length?state.history:[{type:'Ajudou',person:'Camila R.',value:5,date:'Hoje',userId:state.user.id},{type:'Recebeu apoio',person:'Comunidade',value:50,date:'12/10/2026',userId:state.user.id},{type:'Ajudou',person:'João P.',value:2,date:'10/10/2026',userId:state.user.id}];saveState();showApp();return;}
   if(e.target.closest('#request-back-1')){state.requestStep=1;renderRequest();return;}
   if(e.target.closest('#request-back-2')){state.requestStep=2;renderRequest();return;}
@@ -363,7 +404,7 @@ document.addEventListener('submit',e=>{
     e.preventDefault();
     const name=document.querySelector('#signup-name').value.trim(),email=document.querySelector('#signup-email').value.trim().toLowerCase(),password=document.querySelector('#signup-password').value;
     if(state.users.some(u=>u.email===email)){toast('Já existe um cadastro local com este e-mail.');return;}
-    const u={id:'u-'+Date.now(),name,email,password,verified:false,helped:0,received:0,contributed:0,receivedMonth:0,limitPerRequest:50,monthlyLimit:300,nextRequestDays:0,joined:'Outubro de 2026'};
+    const u={id:'u-'+Date.now(),name,email,password,verified:false,level:'initial',helped:0,received:0,contributed:0,receivedMonth:0,limitPerRequest:50,monthlyLimit:150,nextRequestDays:0,joined:'Outubro de 2026'};
     state.users.push(u);state.user=u;state.history=[];notify('Cadastro criado','Seu perfil foi criado neste aparelho. A verificação de identidade ainda é simulada no MVP.');syncUser();setSession(email);showApp();toast('Cadastro criado com sucesso.');return;
   }
   if(e.target.id==='login-form'){

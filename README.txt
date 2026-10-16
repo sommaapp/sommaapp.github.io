@@ -1,1 +1,1 @@
-Somma MVP v3.6 - protótipo local para GitHub Pages.
+Somma MVP v3.7 - protótipo para GitHub Pages

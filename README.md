@@ -1,13 +1,16 @@
-# Somma MVP v3.6
+# Somma MVP v3.7
 
-Refinamentos de lógica e privacidade do protótipo:
+Protótipo PWA da Somma para GitHub Pages.
 
-- publicar pedido não conta como apoio recebido;
-- pedidos em aberto aparecem como “Em arrecadação” no histórico;
-- nomes públicos são abreviados;
-- métricas da home são calculadas a partir do estado local;
-- limite por pedido fica destacado no fluxo de criação;
-- sino em traço;
-- migração automática corrige registros antigos de pedidos publicados.
+## Ajustes desta versão
 
-Nenhum pagamento real é processado.
+- nome público abreviado em todas as telas públicas, inclusive detalhes do pedido;
+- progressão de confiança visível no Perfil;
+- níveis Inicial, Verificado, Comunidade, Confiável e Especial;
+- limites progressivos por pedido e por período;
+- novo usuário inicia em R$ 50 por pedido e R$ 150 por período;
+- usuário verificado passa a R$ 100 por pedido e R$ 300 por período;
+- critérios de progressão apresentados sem criar obrigação de reciprocidade financeira;
+- migração automática dos dados locais da v3.6.
+
+> Protótipo. Não processa pagamentos reais.
