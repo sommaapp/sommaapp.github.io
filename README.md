@@ -1,9 +1,13 @@
-# Somma MVP v3.4
+# Somma MVP v3.6
 
-Protótipo PWA da Somma — plataforma de apoio colaborativo para pequenas necessidades do dia a dia.
+Refinamentos de lógica e privacidade do protótipo:
 
-Esta versão renomeia o produto para **Somma**, preserva os dados locais das versões anteriores e mantém os fluxos funcionais do MVP.
+- publicar pedido não conta como apoio recebido;
+- pedidos em aberto aparecem como “Em arrecadação” no histórico;
+- nomes públicos são abreviados;
+- métricas da home são calculadas a partir do estado local;
+- limite por pedido fica destacado no fluxo de criação;
+- sino em traço;
+- migração automática corrige registros antigos de pedidos publicados.
 
-
-## v3.5
-Refinamentos visuais: saudação com primeiro nome, histórico com estados mais claros, notificações com distinção entre novas e lidas, espaçamento revisado e identidade Somma consistente.
+Nenhum pagamento real é processado.

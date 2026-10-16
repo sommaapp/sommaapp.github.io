@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <title>Somma — Comunidade colaborativa</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./styles.css?v=35" />
+  <link rel="stylesheet" href="./styles.css?v=36" />
 </head>
 <body>
   <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso ao protótipo">
@@ -60,7 +60,7 @@
         <p class="eyebrow">Somma</p>
         <h1 id="page-title">Início</h1>
       </div>
-      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Somma && window.Somma.openNotifications()"><span class="bell-glyph" aria-hidden="true">●</span><span id="notify-badge" class="badge hidden">0</span></button>
+      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Somma && window.Somma.openNotifications()"><svg class="bell-svg" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg><span id="notify-badge" class="badge hidden">0</span></button>
     </header>
 
     <main id="app"></main>
@@ -109,6 +109,6 @@
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="./app.js?v=35"></script>
+  <script src="./app.js?v=36"></script>
 </body>
 </html>
