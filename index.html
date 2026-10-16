@@ -2,20 +2,65 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#111827" />
-  <title>Apoio — MVP</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Apoio" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <title>Apoio — MVP v2</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app-shell">
+  <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso ao protótipo">
+    <div class="auth-wrap">
+      <div class="brand-mark">A</div>
+      <p class="eyebrow">Comunidade Apoio</p>
+      <h1>Pequenas ajudas.<br>Grandes diferenças.</h1>
+      <p class="auth-copy">Entre ou crie seu cadastro para testar o protótipo. Nesta versão, os dados ficam salvos apenas neste aparelho.</p>
+
+      <div class="auth-tabs" role="tablist">
+        <button type="button" class="auth-tab active" data-auth-tab="login">Entrar</button>
+        <button type="button" class="auth-tab" data-auth-tab="signup">Criar conta</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label class="field">E-mail
+          <input id="login-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
+        </label>
+        <label class="field">Senha
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Sua senha" required>
+        </label>
+        <button class="btn btn-primary full" type="submit">Entrar</button>
+      </form>
+
+      <form id="signup-form" class="auth-form hidden">
+        <label class="field">Nome
+          <input id="signup-name" type="text" autocomplete="name" maxlength="40" placeholder="Seu primeiro nome" required>
+        </label>
+        <label class="field">E-mail
+          <input id="signup-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
+        </label>
+        <label class="field">Senha
+          <input id="signup-password" type="password" minlength="4" autocomplete="new-password" placeholder="Crie uma senha" required>
+        </label>
+        <label class="check-row"><input id="signup-terms" type="checkbox" required><span>Li e aceito os termos do protótipo e entendo que contribuições são voluntárias e não constituem empréstimo.</span></label>
+        <button class="btn btn-primary full" type="submit">Criar cadastro</button>
+      </form>
+
+      <button id="demo-access" type="button" class="btn btn-secondary full demo-btn">Entrar como usuário de demonstração</button>
+      <p class="tiny muted center">MVP sem pagamentos reais, sem validação real de CPF e sem movimentação financeira.</p>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell hidden">
     <header class="topbar">
       <div>
         <p class="eyebrow">Comunidade</p>
         <h1 id="page-title">Início</h1>
       </div>
-      <button class="icon-btn" id="notify-btn" aria-label="Notificações">🔔</button>
+      <button class="icon-btn notification-button" id="notify-btn" aria-label="Notificações"><span aria-hidden="true">🔔</span><span id="notify-badge" class="badge hidden">0</span></button>
     </header>
 
     <main id="app"></main>
@@ -32,26 +77,36 @@
   <dialog id="contribute-dialog" class="dialog">
     <form method="dialog" id="contribute-form">
       <div class="dialog-head">
-        <div>
-          <p class="eyebrow">Contribuição voluntária</p>
-          <h2 id="dialog-person">Ajudar</h2>
-        </div>
-        <button value="cancel" class="icon-btn">✕</button>
+        <div><p class="eyebrow">Contribuição voluntária</p><h2 id="dialog-person">Ajudar</h2></div>
+        <button value="cancel" class="icon-btn" aria-label="Fechar">✕</button>
       </div>
       <p class="muted">Sua contribuição não é empréstimo, investimento ou promessa de retorno.</p>
       <div id="amount-options" class="amount-grid"></div>
       <label class="field">Outro valor
-        <input id="custom-amount" type="number" min="1" step="0.01" placeholder="R$ 0,00" />
+        <input id="custom-amount" type="number" min="1" step="0.01" inputmode="decimal" placeholder="R$ 0,00" />
       </label>
       <div class="summary-box">
         <div><span>Contribuição</span><strong id="summary-contribution">R$ 0,00</strong></div>
         <div><span>Taxa da plataforma</span><strong id="summary-fee">R$ 0,00</strong></div>
         <div class="summary-total"><span>Total</span><strong id="summary-total">R$ 0,00</strong></div>
       </div>
-      <button id="confirm-contribution" class="btn btn-primary" value="default" disabled>Confirmar contribuição</button>
+      <p class="legal-note">Ao confirmar, você declara ciência de que esta contribuição é voluntária e não gera direito de restituição pelo beneficiário.</p>
+      <button id="confirm-contribution" class="btn btn-primary full" value="default" disabled>Confirmar contribuição</button>
     </form>
   </dialog>
 
-  <script src="app.js"></script>
+  <dialog id="details-dialog" class="dialog">
+    <div class="dialog-panel" id="details-content"></div>
+  </dialog>
+
+  <dialog id="notifications-dialog" class="dialog">
+    <div class="dialog-panel">
+      <div class="dialog-head"><div><p class="eyebrow">Central</p><h2>Notificações</h2></div><button class="icon-btn close-dialog" data-dialog="notifications-dialog" aria-label="Fechar">✕</button></div>
+      <div id="notifications-list" class="list"></div>
+      <button id="mark-read" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
+    </div>
+  </dialog>
+
+  <script src="./app.js"></script>
 </body>
 </html>

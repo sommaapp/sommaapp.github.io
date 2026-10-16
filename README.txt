@@ -1,8 +1,21 @@
-APOIO — MVP
+APOIO — MVP v2
 
-Como testar:
-1. Extraia a pasta.
-2. Para uma visualizacao simples, abra index.html no navegador.
-3. Para testar como PWA, sirva a pasta por HTTP local (ex.: python -m http.server 8000) e abra http://localhost:8000.
+Versao de demonstracao para GitHub Pages.
 
-Este prototipo NAO processa pagamentos reais e NAO possui backend. Ele serve para validar fluxo, telas e regra de negocio.
+Novidades:
+- cadastro e login local (somente no aparelho)
+- acesso de demonstracao
+- nome dinamico do usuario
+- central de notificacoes
+- lista completa de pedidos
+- detalhes dos pedidos
+- contribuicao simulada com taxa
+- criacao de pedido
+- historico por usuario
+- perfil com limites mensais e intervalo entre pedidos
+- aviso de contribuicao voluntaria e ausencia de emprestimo
+- persistencia local via localStorage
+
+IMPORTANTE:
+Este MVP nao possui banco de dados remoto, KYC real, Pix ou pagamentos reais.
+Nao use dados pessoais reais sensiveis no prototipo.
