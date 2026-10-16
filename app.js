@@ -1,8 +1,10 @@
-const STORAGE_KEY='apoio_mvp_v32_state';
-const LEGACY_STORAGE_KEY='apoio_mvp_v3_state';
+const STORAGE_KEY='apoio_mvp_v33_state';
+const LEGACY_STORAGE_KEY='apoio_mvp_v32_state';
+const LEGACY_STORAGE_KEY_OLD='apoio_mvp_v3_state';
 const LEGACY_STORAGE_KEY_V2='apoio_mvp_v2_state';
-const SESSION_KEY='apoio_mvp_v32_session';
-const LEGACY_SESSION_KEY='apoio_mvp_v3_session';
+const SESSION_KEY='apoio_mvp_v33_session';
+const LEGACY_SESSION_KEY='apoio_mvp_v32_session';
+const LEGACY_SESSION_KEY_OLD='apoio_mvp_v3_session';
 const LEGACY_SESSION_KEY_V2='apoio_mvp_v2_session';
 
 const defaultState={
@@ -41,7 +43,7 @@ const feeFor=v=>Math.round((0.20+Number(v)*0.05)*100)/100;
 function cloneDefault(){return JSON.parse(JSON.stringify(defaultState));}
 function loadState(){
   try{
-    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
+    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
     const saved=raw?JSON.parse(raw):null;
     if(saved && saved.requests){
       return {...cloneDefault(),...saved,historyTab:'all',requestStep:1,requestDraft:{value:'',category:'',description:'',time:'48 horas'},activeRequest:null,selectedAmount:0};
@@ -54,7 +56,7 @@ function saveState(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(safe));
 }
 function setSession(email){localStorage.setItem(SESSION_KEY,email||'');}
-function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
+function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function toast(message){
   if(!toastEl)return;
@@ -175,10 +177,39 @@ function renderProfile(){
   </div>`;
 }
 
+function renderDetailPage(){
+  const r=state.requests.find(x=>x.id===Number(state.detailRequestId));
+  if(!r){state.view='home';renderHome();return;}
+  pageTitle.textContent='Pedido';
+  const remaining=Math.max(0,r.goal-r.raised),pct=Math.min(100,(r.raised/r.goal)*100),own=r.createdBy===currentUser()?.id;
+  app.innerHTML=`<div class="content">
+    <button type="button" class="back-link" onclick="window.Apoio.back()">‹ Voltar</button>
+    <section class="card detail-page">
+      <div class="row between"><div class="row"><div class="avatar large">${escapeHtml((r.name||'U')[0])}</div><div><h2>${escapeHtml(r.name)}</h2><div class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</div></div></div><span class="pill">${escapeHtml(r.category)}</span></div>
+      <p class="detail-description">${escapeHtml(r.description)}</p>
+      <div class="progress"><div style="width:${pct}%"></div></div>
+      <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
+      <div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${r.helpers}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${escapeHtml(r.createdAt||'Hoje')}</strong></div><div><span>Status</span><strong>${remaining<=0?'Concluído':'Ativo'}</strong></div></div>
+      <div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro.</div>
+      <button type="button" class="btn btn-primary full" onclick="window.Apoio.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>
+    </section>
+  </div>`;
+}
+
+function renderNotificationsPage(){
+  pageTitle.textContent='Notificações';
+  app.innerHTML=`<div class="content">
+    <button type="button" class="back-link" onclick="window.Apoio.back()">‹ Voltar</button>
+    <div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div>
+    <div class="list" id="notifications-page-list">${state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon">🔔</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div>
+    <button type="button" id="mark-read-page" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
+  </div>`;
+}
+
 function render(){
   if(!state.user)return;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));
-  const views={home:renderHome,help:renderHelp,request:renderRequest,history:renderHistory,profile:renderProfile};
+  const views={home:renderHome,help:renderHelp,request:renderRequest,history:renderHistory,profile:renderProfile,detail:renderDetailPage,notifications:renderNotificationsPage};
   (views[state.view]||renderHome)();updateBadge();
 }
 
@@ -221,16 +252,13 @@ function safeCloseDialog(el){
   el.classList.remove('dialog-fallback-open');
 }
 function openDetails(id){
-  const r=state.requests.find(x=>x.id===id);if(!r){toast('Pedido não encontrado.');return;}
-  const remaining=Math.max(0,r.goal-r.raised),pct=Math.min(100,(r.raised/r.goal)*100),own=r.createdBy===currentUser()?.id;
-  document.querySelector('#details-content').innerHTML=`<div class="dialog-head"><div><p class="eyebrow">Pedido de apoio</p><h2>${escapeHtml(r.name)}</h2></div><button type="button" class="icon-btn close-dialog" data-dialog="details-dialog" aria-label="Fechar">✕</button></div><div class="detail-meta"><span class="pill">${escapeHtml(r.category)}</span><span class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</span></div><p class="detail-description">${escapeHtml(r.description)}</p><div class="progress"><div style="width:${pct}%"></div></div><div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div><div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${r.helpers}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${escapeHtml(r.createdAt||'Hoje')}</strong></div><div><span>Status</span><strong>${remaining<=0?'Concluído':'Ativo'}</strong></div></div><div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro.</div><button type="button" class="btn btn-primary full contribute" data-id="${r.id}" onclick="window.Apoio.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>`;
-  if(!safeShowDialog(detailsDlg))toast('Não foi possível abrir os detalhes.');
+  const r=state.requests.find(x=>x.id===Number(id));if(!r){toast('Pedido não encontrado.');return;}
+  state.returnView=(state.view==='detail'||state.view==='notifications')?'home':state.view;
+  state.detailRequestId=Number(id);state.view='detail';saveState();render();window.scrollTo({top:0,behavior:'auto'});
 }
 function openNotifications(){
-  const list=document.querySelector('#notifications-list');
-  if(!list){toast('Central de notificações indisponível.');return;}
-  list.innerHTML=state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon">🔔</div><h2>Nenhuma notificação</h2><p>Novidades sobre pedidos e contribuições aparecerão aqui.</p></section>';
-  if(!safeShowDialog(notificationsDlg))toast('Não foi possível abrir as notificações.');
+  state.returnView=(state.view==='detail'||state.view==='notifications')?'home':state.view;
+  state.view='notifications';saveState();render();window.scrollTo({top:0,behavior:'auto'});
 }
 function updateBadge(){
   const unread=state.notifications.filter(n=>!n.read).length,b=document.querySelector('#notify-badge');
@@ -250,6 +278,7 @@ window.Apoio={
   openDetails(id){openDetails(Number(id));},
   openNotifications(){openNotifications();},
   openContribution(id){openContribution(Number(id));},
+  back(){state.view=state.returnView||'home';saveState();render();window.scrollTo({top:0,behavior:'auto'});},
   closeDialog(id){safeCloseDialog(document.getElementById(id));}
 };
 
@@ -265,9 +294,9 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('.amount-btn');if(a){state.selectedAmount=Number(a.dataset.amount);document.querySelectorAll('.amount-btn').forEach(b=>b.classList.toggle('selected',b===a));document.querySelector('#custom-amount').value='';updateContributionSummary();return;}
   const close=e.target.closest('.close-dialog');if(close){safeCloseDialog(document.querySelector('#'+close.dataset.dialog));return;}
   if(e.target.closest('#notify-btn')||e.target.closest('#profile-notifications')){openNotifications();return;}
-  if(e.target.closest('#mark-read')){state.notifications.forEach(n=>n.read=true);saveState();updateBadge();openNotifications();return;}
+  if(e.target.closest('#mark-read')||e.target.closest('#mark-read-page')){state.notifications.forEach(n=>n.read=true);saveState();updateBadge();if(state.view==='notifications')renderNotificationsPage();return;}
   if(e.target.closest('#logout-btn')){logout();return;}
-  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
+  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_OLD);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_OLD);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
   if(e.target.closest('#demo-access')){state.user=makeDemoUser();setSession(state.user.email);state.history=state.history.length?state.history:[{type:'Ajudou',person:'Camila R.',value:5,date:'Hoje',userId:state.user.id},{type:'Recebeu apoio',person:'Comunidade',value:50,date:'12/10/2026',userId:state.user.id},{type:'Ajudou',person:'João P.',value:2,date:'10/10/2026',userId:state.user.id}];saveState();showApp();return;}
   if(e.target.closest('#request-back-1')){state.requestStep=1;renderRequest();return;}
   if(e.target.closest('#request-back-2')){state.requestStep=2;renderRequest();return;}

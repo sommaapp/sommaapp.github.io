@@ -1,3 +1,3 @@
-# Apoio MVP v3.2
+# Apoio MVP v3.3
 
-Correção de compatibilidade de cliques no iPhone/Safari. Os botões principais usam chamadas diretas e o service worker foi alterado para evitar cache antigo.
+Correção de navegação para iPhone: detalhes do pedido e notificações agora abrem como telas normais do aplicativo, sem depender de <dialog>.
