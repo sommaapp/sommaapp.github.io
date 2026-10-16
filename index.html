@@ -6,17 +6,17 @@
   <meta name="theme-color" content="#111827" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Apoio" />
+  <meta name="apple-mobile-web-app-title" content="Somma" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-  <title>Apoio — MVP v3.3</title>
+  <title>Somma — MVP v3.4</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./styles.css?v=33" />
+  <link rel="stylesheet" href="./styles.css?v=34" />
 </head>
 <body>
   <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso ao protótipo">
     <div class="auth-wrap">
-      <div class="brand-mark">A</div>
-      <p class="eyebrow">Comunidade Apoio</p>
+      <div class="brand-mark">S</div>
+      <p class="eyebrow">Comunidade Somma</p>
       <h1>Pequenas ajudas.<br>Grandes diferenças.</h1>
       <p class="auth-copy">Entre ou crie seu cadastro para testar o protótipo. Nesta versão, os dados ficam salvos apenas neste aparelho.</p>
 
@@ -57,20 +57,20 @@
   <div id="app-shell" class="app-shell hidden">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Comunidade</p>
+        <p class="eyebrow">Somma</p>
         <h1 id="page-title">Início</h1>
       </div>
-      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Apoio && window.Apoio.openNotifications()"><span aria-hidden="true">🔔</span><span id="notify-badge" class="badge hidden">0</span></button>
+      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Somma && window.Somma.openNotifications()"><span aria-hidden="true">🔔</span><span id="notify-badge" class="badge hidden">0</span></button>
     </header>
 
     <main id="app"></main>
 
     <nav class="bottom-nav" aria-label="Navegação principal">
-      <button type="button" data-view="home" onclick="window.Apoio && window.Apoio.go('home')" class="nav-item active"><span>⌂</span><small>Início</small></button>
-      <button type="button" data-view="help" onclick="window.Apoio && window.Apoio.go('help')" class="nav-item"><span>♡</span><small>Ajudar</small></button>
-      <button type="button" data-view="request" onclick="window.Apoio && window.Apoio.go('request')" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
-      <button type="button" data-view="history" onclick="window.Apoio && window.Apoio.go('history')" class="nav-item"><span>◷</span><small>Histórico</small></button>
-      <button type="button" data-view="profile" onclick="window.Apoio && window.Apoio.go('profile')" class="nav-item"><span>◎</span><small>Perfil</small></button>
+      <button type="button" data-view="home" onclick="window.Somma && window.Somma.go('home')" class="nav-item active"><span>⌂</span><small>Início</small></button>
+      <button type="button" data-view="help" onclick="window.Somma && window.Somma.go('help')" class="nav-item"><span>♡</span><small>Ajudar</small></button>
+      <button type="button" data-view="request" onclick="window.Somma && window.Somma.go('request')" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
+      <button type="button" data-view="history" onclick="window.Somma && window.Somma.go('history')" class="nav-item"><span>◷</span><small>Histórico</small></button>
+      <button type="button" data-view="profile" onclick="window.Somma && window.Somma.go('profile')" class="nav-item"><span>◎</span><small>Perfil</small></button>
     </nav>
   </div>
 
@@ -101,7 +101,7 @@
 
   <dialog id="notifications-dialog" class="dialog">
     <div class="dialog-panel">
-      <div class="dialog-head"><div><p class="eyebrow">Central</p><h2>Notificações</h2></div><button class="icon-btn close-dialog" data-dialog="notifications-dialog" onclick="window.Apoio && window.Apoio.closeDialog('notifications-dialog')" aria-label="Fechar">✕</button></div>
+      <div class="dialog-head"><div><p class="eyebrow">Central</p><h2>Notificações</h2></div><button class="icon-btn close-dialog" data-dialog="notifications-dialog" onclick="window.Somma && window.Somma.closeDialog('notifications-dialog')" aria-label="Fechar">✕</button></div>
       <div id="notifications-list" class="list"></div>
       <button type="button" id="mark-read" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
     </div>
@@ -109,6 +109,6 @@
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="./app.js?v=33"></script>
+  <script src="./app.js?v=34"></script>
 </body>
 </html>

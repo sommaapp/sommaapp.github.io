@@ -1,9 +1,11 @@
-const STORAGE_KEY='apoio_mvp_v33_state';
-const LEGACY_STORAGE_KEY='apoio_mvp_v32_state';
+const STORAGE_KEY='somma_mvp_v34_state';
+const LEGACY_STORAGE_KEY='apoio_mvp_v33_state';
+const LEGACY_STORAGE_KEY_2='apoio_mvp_v32_state';
 const LEGACY_STORAGE_KEY_OLD='apoio_mvp_v3_state';
 const LEGACY_STORAGE_KEY_V2='apoio_mvp_v2_state';
-const SESSION_KEY='apoio_mvp_v33_session';
-const LEGACY_SESSION_KEY='apoio_mvp_v32_session';
+const SESSION_KEY='somma_mvp_v34_session';
+const LEGACY_SESSION_KEY='apoio_mvp_v33_session';
+const LEGACY_SESSION_KEY_2='apoio_mvp_v32_session';
 const LEGACY_SESSION_KEY_OLD='apoio_mvp_v3_session';
 const LEGACY_SESSION_KEY_V2='apoio_mvp_v2_session';
 
@@ -43,9 +45,11 @@ const feeFor=v=>Math.round((0.20+Number(v)*0.05)*100)/100;
 function cloneDefault(){return JSON.parse(JSON.stringify(defaultState));}
 function loadState(){
   try{
-    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
+    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_2)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
     const saved=raw?JSON.parse(raw):null;
     if(saved && saved.requests){
+      if(saved.user && saved.user.email==='demo@apoio.local') saved.user.email='demo@somma.local';
+      if(Array.isArray(saved.users)) saved.users.forEach(u=>{if(u.email==='demo@apoio.local') u.email='demo@somma.local';});
       return {...cloneDefault(),...saved,historyTab:'all',requestStep:1,requestDraft:{value:'',category:'',description:'',time:'48 horas'},activeRequest:null,selectedAmount:0};
     }
   }catch(e){}
@@ -56,7 +60,7 @@ function saveState(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(safe));
 }
 function setSession(email){localStorage.setItem(SESSION_KEY,email||'');}
-function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
+function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_2)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function toast(message){
   if(!toastEl)return;
@@ -69,16 +73,16 @@ function init(){
   if(session){
     const found=state.users.find(u=>u.email===session);
     if(found)state.user=found;
-    if(session==='demo@apoio.local'&&!found)state.user=makeDemoUser();
+    if(session==='demo@somma.local'&&!found)state.user=makeDemoUser();
   }
   if(state.user)showApp();else showAuth();
   updateBadge();
 }
 
 function makeDemoUser(){
-  let demo=state.users.find(u=>u.email==='demo@apoio.local');
+  let demo=state.users.find(u=>u.email==='demo@somma.local');
   if(!demo){
-    demo={id:'demo-user',name:'Paula',email:'demo@apoio.local',password:'demo',verified:true,helped:18,received:2,contributed:74,receivedMonth:50,limitPerRequest:100,monthlyLimit:300,nextRequestDays:3,joined:'Outubro de 2026'};
+    demo={id:'demo-user',name:'Paula',email:'demo@somma.local',password:'demo',verified:true,helped:18,received:2,contributed:74,receivedMonth:50,limitPerRequest:100,monthlyLimit:300,nextRequestDays:3,joined:'Outubro de 2026'};
     state.users.push(demo);saveState();
   }
   return demo;
@@ -113,7 +117,7 @@ function requestCard(r){
     <div class="progress" aria-label="${Math.round(pct)}% da meta"><div style="width:${pct}%"></div></div>
     <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
     <div class="tiny muted top-mini">${r.helpers} pessoas ajudaram · faltam ${brl(remaining)}</div>
-    <div class="actions"><button type="button" class="btn btn-primary contribute" data-id="${r.id}" onclick="window.Apoio.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Seu pedido':remaining<=0?'Meta atingida':'Ajudar agora'}</button><button type="button" class="btn btn-secondary details" data-id="${r.id}" onclick="window.Apoio.openDetails(${r.id})">Ver pedido</button></div>
+    <div class="actions"><button type="button" class="btn btn-primary contribute" data-id="${r.id}" onclick="window.Somma.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Seu pedido':remaining<=0?'Meta atingida':'Ajudar agora'}</button><button type="button" class="btn btn-secondary details" data-id="${r.id}" onclick="window.Somma.openDetails(${r.id})">Ver pedido</button></div>
   </article>`;
 }
 
@@ -126,7 +130,7 @@ function renderHome(){
     <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(user.name)}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
     <div class="stats"><div class="stat"><strong>247</strong><span>ajudas hoje</span></div><div class="stat"><strong>81%</strong><span>metas concluídas</span></div><div class="stat"><strong>${brl(1)}</strong><span>para começar</span></div></div>
     <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
-    <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-go="help" onclick="window.Apoio.go('help')">Ver todos</button></div>
+    <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-go="help" onclick="window.Somma.go('help')">Ver todos</button></div>
     ${primary?requestCard(primary):''}
     ${almost?`<div class="section-head"><h2>Quase lá</h2></div>${requestCard(almost)}`:''}
   </div>`;
@@ -142,7 +146,7 @@ function canCreateRequest(u){return Number(u.nextRequestDays||0)<=0;}
 function renderRequest(){
   const u=currentUser();pageTitle.textContent='Pedir apoio';
   if(!canCreateRequest(u)){
-    app.innerHTML=`<div class="content"><section class="empty-state"><div class="empty-icon">⏳</div><h2>Seu próximo pedido ainda não está disponível</h2><p>Para este protótipo, existe um intervalo mínimo entre pedidos.</p><div class="limit-card"><span>Disponível em</span><strong>${u.nextRequestDays} dias</strong></div>${u.email==='demo@apoio.local'?'<button class="btn btn-primary full" id="demo-unlock-request">Liberar pedido para testar</button><button class="btn btn-secondary full top-gap" data-go="profile">Ver meus limites</button>':'<button class="btn btn-secondary full" data-go="profile">Ver meus limites</button>'}</section></div>`;return;
+    app.innerHTML=`<div class="content"><section class="empty-state"><div class="empty-icon">⏳</div><h2>Seu próximo pedido ainda não está disponível</h2><p>Para este protótipo, existe um intervalo mínimo entre pedidos.</p><div class="limit-card"><span>Disponível em</span><strong>${u.nextRequestDays} dias</strong></div>${u.email==='demo@somma.local'?'<button class="btn btn-primary full" id="demo-unlock-request">Liberar pedido para testar</button><button class="btn btn-secondary full top-gap" data-go="profile">Ver meus limites</button>':'<button class="btn btn-secondary full" data-go="profile">Ver meus limites</button>'}</section></div>`;return;
   }
   const d=state.requestDraft||{value:'',category:'',description:'',time:'48 horas'};
   const step=state.requestStep||1;
@@ -173,7 +177,7 @@ function renderProfile(){
     <div class="stats"><div class="stat"><strong>${u.helped}</strong><span>ajudou</span></div><div class="stat"><strong>${u.received}</strong><span>recebeu</span></div><div class="stat"><strong>${brl(u.contributed)}</strong><span>contribuiu</span></div></div>
     <section class="card"><div class="section-head no-margin"><h2>Seus limites</h2></div><div class="limit-row"><span>Por pedido</span><strong>${brl(u.limitPerRequest)}</strong></div><div class="limit-row"><span>Recebido neste período</span><strong>${brl(u.receivedMonth||0)} / ${brl(u.monthlyLimit)}</strong></div><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted">Ainda disponível no período: ${brl(available)}</div><div class="limit-row divider"><span>Próximo pedido</span><strong>${u.nextRequestDays>0?`Em ${u.nextRequestDays} dias`:'Disponível agora'}</strong></div></section>
     <section class="card"><div class="section-head no-margin"><h2>Dados do perfil</h2></div><form id="profile-form"><label class="field">Nome<input id="profile-name" maxlength="40" value="${escapeHtml(u.name)}" required></label><label class="field">E-mail<input value="${escapeHtml(u.email)}" disabled></label><button class="btn btn-secondary full">Salvar nome</button></form></section>
-    <div class="list"><button class="list-button" id="profile-notifications" onclick="window.Apoio.openNotifications()"><span>Notificações</span><strong>›</strong></button><button class="list-button" id="logout-btn"><span>Sair do protótipo</span><strong>›</strong></button><button class="list-button danger" id="reset-btn"><span>Apagar dados locais do MVP</span><strong>›</strong></button></div>
+    <div class="list"><button class="list-button" id="profile-notifications" onclick="window.Somma.openNotifications()"><span>Notificações</span><strong>›</strong></button><button class="list-button" id="logout-btn"><span>Sair do protótipo</span><strong>›</strong></button><button class="list-button danger" id="reset-btn"><span>Apagar dados locais do MVP</span><strong>›</strong></button></div>
   </div>`;
 }
 
@@ -183,7 +187,7 @@ function renderDetailPage(){
   pageTitle.textContent='Pedido';
   const remaining=Math.max(0,r.goal-r.raised),pct=Math.min(100,(r.raised/r.goal)*100),own=r.createdBy===currentUser()?.id;
   app.innerHTML=`<div class="content">
-    <button type="button" class="back-link" onclick="window.Apoio.back()">‹ Voltar</button>
+    <button type="button" class="back-link" onclick="window.Somma.back()">‹ Voltar</button>
     <section class="card detail-page">
       <div class="row between"><div class="row"><div class="avatar large">${escapeHtml((r.name||'U')[0])}</div><div><h2>${escapeHtml(r.name)}</h2><div class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</div></div></div><span class="pill">${escapeHtml(r.category)}</span></div>
       <p class="detail-description">${escapeHtml(r.description)}</p>
@@ -191,7 +195,7 @@ function renderDetailPage(){
       <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
       <div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${r.helpers}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${escapeHtml(r.createdAt||'Hoje')}</strong></div><div><span>Status</span><strong>${remaining<=0?'Concluído':'Ativo'}</strong></div></div>
       <div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro.</div>
-      <button type="button" class="btn btn-primary full" onclick="window.Apoio.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>
+      <button type="button" class="btn btn-primary full" onclick="window.Somma.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>
     </section>
   </div>`;
 }
@@ -199,7 +203,7 @@ function renderDetailPage(){
 function renderNotificationsPage(){
   pageTitle.textContent='Notificações';
   app.innerHTML=`<div class="content">
-    <button type="button" class="back-link" onclick="window.Apoio.back()">‹ Voltar</button>
+    <button type="button" class="back-link" onclick="window.Somma.back()">‹ Voltar</button>
     <div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div>
     <div class="list" id="notifications-page-list">${state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon">🔔</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div>
     <button type="button" id="mark-read-page" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
@@ -267,7 +271,7 @@ function updateBadge(){
 function resetRequestFlow(){state.requestStep=1;state.requestDraft={value:'',category:'',description:'',time:'48 horas'};}
 
 // API direta para cliques em iPhone/Safari.
-window.Apoio={
+window.Somma={
   go(view){
     state.view=view;
     if(view!=='request')resetRequestFlow();

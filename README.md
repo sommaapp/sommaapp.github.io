@@ -1,3 +1,5 @@
-# Apoio MVP v3.3
+# Somma MVP v3.4
 
-Correção de navegação para iPhone: detalhes do pedido e notificações agora abrem como telas normais do aplicativo, sem depender de <dialog>.
+Protótipo PWA da Somma — plataforma de apoio colaborativo para pequenas necessidades do dia a dia.
+
+Esta versão renomeia o produto para **Somma**, preserva os dados locais das versões anteriores e mantém os fluxos funcionais do MVP.

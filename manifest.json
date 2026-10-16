@@ -1,6 +1,6 @@
 {
-  "name": "Apoio — Comunidade colaborativa",
-  "short_name": "Apoio",
+  "name": "Somma — Comunidade colaborativa",
+  "short_name": "Somma",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
