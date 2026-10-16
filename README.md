@@ -1,3 +1,3 @@
-# Apoio MVP v3.1
+# Apoio MVP v3.2
 
-Correção de compatibilidade de cliques no iPhone/Safari para Ver pedido, navegação, Pedir apoio, Histórico e notificações.
+Correção de compatibilidade de cliques no iPhone/Safari. Os botões principais usam chamadas diretas e o service worker foi alterado para evitar cache antigo.
