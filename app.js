@@ -109,7 +109,7 @@ function requestCard(r){
     <div class="progress" aria-label="${Math.round(pct)}% da meta"><div style="width:${pct}%"></div></div>
     <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
     <div class="tiny muted top-mini">${r.helpers} pessoas ajudaram · faltam ${brl(remaining)}</div>
-    <div class="actions"><button class="btn btn-primary contribute" data-id="${r.id}" ${remaining<=0||own?'disabled':''}>${own?'Seu pedido':remaining<=0?'Meta atingida':'Ajudar agora'}</button><button class="btn btn-secondary details" data-id="${r.id}">Ver pedido</button></div>
+    <div class="actions"><button type="button" class="btn btn-primary contribute" data-id="${r.id}" ${remaining<=0||own?'disabled':''}>${own?'Seu pedido':remaining<=0?'Meta atingida':'Ajudar agora'}</button><button type="button" class="btn btn-secondary details" data-id="${r.id}">Ver pedido</button></div>
   </article>`;
 }
 
@@ -122,7 +122,7 @@ function renderHome(){
     <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(user.name)}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
     <div class="stats"><div class="stat"><strong>247</strong><span>ajudas hoje</span></div><div class="stat"><strong>81%</strong><span>metas concluídas</span></div><div class="stat"><strong>${brl(1)}</strong><span>para começar</span></div></div>
     <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
-    <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button class="link-btn" data-go="help">Ver todos</button></div>
+    <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-go="help">Ver todos</button></div>
     ${primary?requestCard(primary):''}
     ${almost?`<div class="section-head"><h2>Quase lá</h2></div>${requestCard(almost)}`:''}
   </div>`;
@@ -198,16 +198,37 @@ function updateContributionSummary(){
   document.querySelector('#summary-total').textContent=brl(v+fee);
   document.querySelector('#confirm-contribution').disabled=v<=0;
 }
+function safeShowDialog(el){
+  if(!el)return false;
+  try{
+    if(typeof el.showModal==='function'){
+      if(!el.open)el.showModal();
+    }else{
+      el.setAttribute('open','');
+      el.classList.add('dialog-fallback-open');
+    }
+    return true;
+  }catch(err){
+    console.error(err);
+    try{el.setAttribute('open','');el.classList.add('dialog-fallback-open');return true;}catch(e){return false;}
+  }
+}
+function safeCloseDialog(el){
+  if(!el)return;
+  try{if(typeof el.close==='function'&&el.open)el.close();else el.removeAttribute('open');}catch(e){el.removeAttribute('open');}
+  el.classList.remove('dialog-fallback-open');
+}
 function openDetails(id){
-  const r=state.requests.find(x=>x.id===id);if(!r)return;
+  const r=state.requests.find(x=>x.id===id);if(!r){toast('Pedido não encontrado.');return;}
   const remaining=Math.max(0,r.goal-r.raised),pct=Math.min(100,(r.raised/r.goal)*100),own=r.createdBy===currentUser()?.id;
-  document.querySelector('#details-content').innerHTML=`<div class="dialog-head"><div><p class="eyebrow">Pedido de apoio</p><h2>${escapeHtml(r.name)}</h2></div><button class="icon-btn close-dialog" data-dialog="details-dialog" aria-label="Fechar">✕</button></div><div class="detail-meta"><span class="pill">${escapeHtml(r.category)}</span><span class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</span></div><p class="detail-description">${escapeHtml(r.description)}</p><div class="progress"><div style="width:${pct}%"></div></div><div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div><div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${r.helpers}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${escapeHtml(r.createdAt||'Hoje')}</strong></div><div><span>Status</span><strong>${remaining<=0?'Concluído':'Ativo'}</strong></div></div><div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro.</div><button class="btn btn-primary full contribute" data-id="${r.id}" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>`;
-  detailsDlg.showModal();
+  document.querySelector('#details-content').innerHTML=`<div class="dialog-head"><div><p class="eyebrow">Pedido de apoio</p><h2>${escapeHtml(r.name)}</h2></div><button type="button" class="icon-btn close-dialog" data-dialog="details-dialog" aria-label="Fechar">✕</button></div><div class="detail-meta"><span class="pill">${escapeHtml(r.category)}</span><span class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</span></div><p class="detail-description">${escapeHtml(r.description)}</p><div class="progress"><div style="width:${pct}%"></div></div><div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div><div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${r.helpers}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${escapeHtml(r.createdAt||'Hoje')}</strong></div><div><span>Status</span><strong>${remaining<=0?'Concluído':'Ativo'}</strong></div></div><div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro.</div><button type="button" class="btn btn-primary full contribute" data-id="${r.id}" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>`;
+  if(!safeShowDialog(detailsDlg))toast('Não foi possível abrir os detalhes.');
 }
 function openNotifications(){
   const list=document.querySelector('#notifications-list');
+  if(!list){toast('Central de notificações indisponível.');return;}
   list.innerHTML=state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon">🔔</div><h2>Nenhuma notificação</h2><p>Novidades sobre pedidos e contribuições aparecerão aqui.</p></section>';
-  notificationsDlg.showModal();
+  if(!safeShowDialog(notificationsDlg))toast('Não foi possível abrir as notificações.');
 }
 function updateBadge(){
   const unread=state.notifications.filter(n=>!n.read).length,b=document.querySelector('#notify-badge');
@@ -219,13 +240,13 @@ function resetRequestFlow(){state.requestStep=1;state.requestDraft={value:'',cat
 document.addEventListener('click',e=>{
   const tab=e.target.closest('[data-auth-tab]');
   if(tab){document.querySelectorAll('.auth-tab').forEach(x=>x.classList.toggle('active',x===tab));document.querySelector('#login-form').classList.toggle('hidden',tab.dataset.authTab!=='login');document.querySelector('#signup-form').classList.toggle('hidden',tab.dataset.authTab!=='signup');return;}
-  const nav=e.target.closest('[data-view]');if(nav){state.view=nav.dataset.view;if(state.view!=='request')resetRequestFlow();render();return;}
-  const go=e.target.closest('[data-go]');if(go){state.view=go.dataset.go;render();return;}
+  const nav=e.target.closest('[data-view]');if(nav){state.view=nav.dataset.view;if(state.view!=='request')resetRequestFlow();saveState();render();return;}
+  const go=e.target.closest('[data-go]');if(go){state.view=go.dataset.go;saveState();render();return;}
   const hist=e.target.closest('[data-history-tab]');if(hist){state.historyTab=hist.dataset.historyTab;renderHistory();return;}
-  const c=e.target.closest('.contribute');if(c){if(detailsDlg.open)detailsDlg.close();openContribution(Number(c.dataset.id));return;}
+  const c=e.target.closest('.contribute');if(c){if(detailsDlg?.open)safeCloseDialog(detailsDlg);openContribution(Number(c.dataset.id));return;}
   const d=e.target.closest('.details');if(d){openDetails(Number(d.dataset.id));return;}
   const a=e.target.closest('.amount-btn');if(a){state.selectedAmount=Number(a.dataset.amount);document.querySelectorAll('.amount-btn').forEach(b=>b.classList.toggle('selected',b===a));document.querySelector('#custom-amount').value='';updateContributionSummary();return;}
-  const close=e.target.closest('.close-dialog');if(close){document.querySelector('#'+close.dataset.dialog)?.close();return;}
+  const close=e.target.closest('.close-dialog');if(close){safeCloseDialog(document.querySelector('#'+close.dataset.dialog));return;}
   if(e.target.closest('#notify-btn')||e.target.closest('#profile-notifications')){openNotifications();return;}
   if(e.target.closest('#mark-read')){state.notifications.forEach(n=>n.read=true);saveState();updateBadge();openNotifications();return;}
   if(e.target.closest('#logout-btn')){logout();return;}
@@ -235,6 +256,18 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#request-back-2')){state.requestStep=2;renderRequest();return;}
   if(e.target.closest('#demo-unlock-request')){const u=currentUser();u.nextRequestDays=0;syncUser();toast('Pedido liberado para teste.');renderRequest();return;}
 });
+
+// Fallback para Safari/iPhone quando a PWA perde alguns eventos de clique após atualização de cache.
+let lastTouchActionAt=0;
+document.addEventListener('touchend',e=>{
+  const target=e.target.closest('[data-view],[data-go],.details,#notify-btn,#profile-notifications');
+  if(!target)return;
+  const now=Date.now();if(now-lastTouchActionAt<350)return;lastTouchActionAt=now;
+  if(target.matches('[data-view]')){state.view=target.dataset.view;if(state.view!=='request')resetRequestFlow();saveState();render();return;}
+  if(target.matches('[data-go]')){state.view=target.dataset.go;saveState();render();return;}
+  if(target.matches('.details')){openDetails(Number(target.dataset.id));return;}
+  if(target.id==='notify-btn'||target.id==='profile-notifications'){openNotifications();}
+},{passive:true});
 
 document.addEventListener('input',e=>{
   if(e.target.id==='custom-amount'){

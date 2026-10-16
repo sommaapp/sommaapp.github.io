@@ -8,9 +8,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Apoio" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-  <title>Apoio — MVP v3</title>
+  <title>Apoio — MVP v3.1</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=31" />
 </head>
 <body>
   <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso ao protótipo">
@@ -60,17 +60,17 @@
         <p class="eyebrow">Comunidade</p>
         <h1 id="page-title">Início</h1>
       </div>
-      <button class="icon-btn notification-button" id="notify-btn" aria-label="Notificações"><span aria-hidden="true">🔔</span><span id="notify-badge" class="badge hidden">0</span></button>
+      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações"><span aria-hidden="true">🔔</span><span id="notify-badge" class="badge hidden">0</span></button>
     </header>
 
     <main id="app"></main>
 
     <nav class="bottom-nav" aria-label="Navegação principal">
-      <button data-view="home" class="nav-item active"><span>⌂</span><small>Início</small></button>
-      <button data-view="help" class="nav-item"><span>♡</span><small>Ajudar</small></button>
-      <button data-view="request" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
-      <button data-view="history" class="nav-item"><span>◷</span><small>Histórico</small></button>
-      <button data-view="profile" class="nav-item"><span>◎</span><small>Perfil</small></button>
+      <button type="button" data-view="home" class="nav-item active"><span>⌂</span><small>Início</small></button>
+      <button type="button" data-view="help" class="nav-item"><span>♡</span><small>Ajudar</small></button>
+      <button type="button" data-view="request" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
+      <button type="button" data-view="history" class="nav-item"><span>◷</span><small>Histórico</small></button>
+      <button type="button" data-view="profile" class="nav-item"><span>◎</span><small>Perfil</small></button>
     </nav>
   </div>
 
@@ -103,12 +103,12 @@
     <div class="dialog-panel">
       <div class="dialog-head"><div><p class="eyebrow">Central</p><h2>Notificações</h2></div><button class="icon-btn close-dialog" data-dialog="notifications-dialog" aria-label="Fechar">✕</button></div>
       <div id="notifications-list" class="list"></div>
-      <button id="mark-read" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
+      <button type="button" id="mark-read" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
     </div>
   </dialog>
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="./app.js"></script>
+  <script src="./app.js?v=31"></script>
 </body>
 </html>
