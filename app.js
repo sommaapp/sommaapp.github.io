@@ -1,10 +1,12 @@
-const STORAGE_KEY='somma_mvp_v34_state';
-const LEGACY_STORAGE_KEY='apoio_mvp_v33_state';
+const STORAGE_KEY='somma_mvp_v35_state';
+const LEGACY_STORAGE_KEY='somma_mvp_v34_state';
+const LEGACY_STORAGE_KEY_SOMMA_V34='apoio_mvp_v33_state';
 const LEGACY_STORAGE_KEY_2='apoio_mvp_v32_state';
 const LEGACY_STORAGE_KEY_OLD='apoio_mvp_v3_state';
 const LEGACY_STORAGE_KEY_V2='apoio_mvp_v2_state';
-const SESSION_KEY='somma_mvp_v34_session';
-const LEGACY_SESSION_KEY='apoio_mvp_v33_session';
+const SESSION_KEY='somma_mvp_v35_session';
+const LEGACY_SESSION_KEY='somma_mvp_v34_session';
+const LEGACY_SESSION_KEY_SOMMA_V34='apoio_mvp_v33_session';
 const LEGACY_SESSION_KEY_2='apoio_mvp_v32_session';
 const LEGACY_SESSION_KEY_OLD='apoio_mvp_v3_session';
 const LEGACY_SESSION_KEY_V2='apoio_mvp_v2_session';
@@ -45,7 +47,7 @@ const feeFor=v=>Math.round((0.20+Number(v)*0.05)*100)/100;
 function cloneDefault(){return JSON.parse(JSON.stringify(defaultState));}
 function loadState(){
   try{
-    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_2)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
+    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_2)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
     const saved=raw?JSON.parse(raw):null;
     if(saved && saved.requests){
       if(saved.user && saved.user.email==='demo@apoio.local') saved.user.email='demo@somma.local';
@@ -60,7 +62,7 @@ function saveState(){
   localStorage.setItem(STORAGE_KEY,JSON.stringify(safe));
 }
 function setSession(email){localStorage.setItem(SESSION_KEY,email||'');}
-function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_2)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
+function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_SESSION_KEY_2)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function toast(message){
   if(!toastEl)return;
@@ -98,7 +100,8 @@ function syncUser(){
   if(i>=0)state.users[i]=state.user;else state.users.push(state.user);
   saveState();
 }
-function userInitial(){return(currentUser()?.name||'U').trim().charAt(0).toUpperCase();}
+function firstName(name){return String(name||'').trim().split(/\s+/)[0]||'Usuário';}
+function userInitial(){return firstName(currentUser()?.name).charAt(0).toUpperCase();}
 function showAuth(){authScreen.classList.remove('hidden');appShell.classList.add('hidden');}
 function showApp(){authScreen.classList.add('hidden');appShell.classList.remove('hidden');render();}
 function logout(){state.user=null;setSession('');localStorage.removeItem(LEGACY_SESSION_KEY);state.view='home';showAuth();}
@@ -127,7 +130,7 @@ function renderHome(){
   const primary=active[0]||state.requests[0];
   const almost=active.slice().sort((a,b)=>(a.goal-a.raised)-(b.goal-b.raised)).find(r=>r.id!==primary?.id)||active[0];
   app.innerHTML=`<div class="content">
-    <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(user.name)}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
+    <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(firstName(user.name))}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
     <div class="stats"><div class="stat"><strong>247</strong><span>ajudas hoje</span></div><div class="stat"><strong>81%</strong><span>metas concluídas</span></div><div class="stat"><strong>${brl(1)}</strong><span>para começar</span></div></div>
     <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
     <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-go="help" onclick="window.Somma.go('help')">Ver todos</button></div>
@@ -165,7 +168,7 @@ function renderHistory(){
   const all=state.history.filter(h=>!h.userId||h.userId===u.id);
   const filter=state.historyTab||'all';
   const items=all.filter(h=>filter==='all'||(filter==='helped'&&h.type==='Ajudou')||(filter==='received'&&h.type==='Recebeu apoio'));
-  app.innerHTML=`<div class="content"><div class="stats"><div class="stat"><strong>${u.helped}</strong><span>pessoas ajudadas</span></div><div class="stat"><strong>${brl(u.contributed)}</strong><span>contribuído</span></div><div class="stat"><strong>${u.received}</strong><span>apoios recebidos</span></div></div><div class="segmented"><button class="${filter==='all'?'active':''}" data-history-tab="all">Todos</button><button class="${filter==='helped'?'active':''}" data-history-tab="helped">Ajudei</button><button class="${filter==='received'?'active':''}" data-history-tab="received">Recebi</button></div><div class="section-head"><h2>Movimentações</h2></div>${items.length?`<div class="list">${items.map(h=>`<div class="list-item"><div><strong>${escapeHtml(h.type)}</strong><div class="tiny muted">${escapeHtml(h.person)} · ${escapeHtml(h.date)}</div></div><strong>${brl(h.value)}</strong></div>`).join('')}</div>`:`<section class="empty-state small"><div class="empty-icon">◷</div><h2>Nenhuma movimentação</h2><p>Não há registros para este filtro.</p></section>`}</div>`;
+  app.innerHTML=`<div class="content"><div class="stats"><div class="stat"><strong>${u.helped}</strong><span>pessoas ajudadas</span></div><div class="stat"><strong>${brl(u.contributed)}</strong><span>contribuído</span></div><div class="stat"><strong>${u.received}</strong><span>apoios recebidos</span></div></div><div class="segmented"><button class="${filter==='all'?'active':''}" data-history-tab="all">Todos</button><button class="${filter==='helped'?'active':''}" data-history-tab="helped">Ajudei</button><button class="${filter==='received'?'active':''}" data-history-tab="received">Recebi</button></div><div class="section-head history-head"><div><h2>Movimentações</h2><p class="tiny muted">Seu histórico de participação na Somma.</p></div></div>${items.length?`<div class="history-list">${items.map(h=>{const helped=h.type==='Ajudou';const amount=Number(h.value||0);return `<div class="history-item ${helped?'history-helped':'history-received'}"><div class="history-icon">${helped?'♡':'↓'}</div><div class="history-main"><div class="history-title-row"><strong>${helped?'Você ajudou':'Você recebeu apoio'}</strong><span class="history-badge">${helped?'Ajudei':'Recebi'}</span></div><div class="tiny muted">${escapeHtml(h.person)} · ${escapeHtml(h.date)}</div></div><strong class="history-value">${amount>0?brl(amount):'—'}</strong></div>`}).join('')}</div>`:`<section class="empty-state small"><div class="empty-icon">◷</div><h2>Nenhuma movimentação</h2><p>Não há registros para este filtro.</p></section>`}</div>`;
 }
 
 function renderProfile(){
@@ -205,7 +208,7 @@ function renderNotificationsPage(){
   app.innerHTML=`<div class="content">
     <button type="button" class="back-link" onclick="window.Somma.back()">‹ Voltar</button>
     <div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div>
-    <div class="list" id="notifications-page-list">${state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon">🔔</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div>
+    <div class="notification-list" id="notifications-page-list">${state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><span class="notification-dot" aria-hidden="true"></span><div class="notification-copy"><div class="notification-title-row"><strong>${escapeHtml(n.title)}</strong>${n.read?'':'<span class="new-label">Nova</span>'}</div><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon bell-icon">◌</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div>
     <button type="button" id="mark-read-page" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
   </div>`;
 }
@@ -300,7 +303,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#notify-btn')||e.target.closest('#profile-notifications')){openNotifications();return;}
   if(e.target.closest('#mark-read')||e.target.closest('#mark-read-page')){state.notifications.forEach(n=>n.read=true);saveState();updateBadge();if(state.view==='notifications')renderNotificationsPage();return;}
   if(e.target.closest('#logout-btn')){logout();return;}
-  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_OLD);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_OLD);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
+  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_OLD);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_SESSION_KEY_OLD);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
   if(e.target.closest('#demo-access')){state.user=makeDemoUser();setSession(state.user.email);state.history=state.history.length?state.history:[{type:'Ajudou',person:'Camila R.',value:5,date:'Hoje',userId:state.user.id},{type:'Recebeu apoio',person:'Comunidade',value:50,date:'12/10/2026',userId:state.user.id},{type:'Ajudou',person:'João P.',value:2,date:'10/10/2026',userId:state.user.id}];saveState();showApp();return;}
   if(e.target.closest('#request-back-1')){state.requestStep=1;renderRequest();return;}
   if(e.target.closest('#request-back-2')){state.requestStep=2;renderRequest();return;}
@@ -329,7 +332,7 @@ document.addEventListener('submit',e=>{
     e.preventDefault();const email=document.querySelector('#login-email').value.trim().toLowerCase(),password=document.querySelector('#login-password').value;
     const u=state.users.find(x=>x.email===email&&x.password===password);
     if(!u){toast('E-mail ou senha não encontrados neste aparelho.');return;}
-    state.user=u;setSession(email);showApp();toast(`Bem-vindo, ${u.name}.`);return;
+    state.user=u;setSession(email);showApp();toast(`Bem-vindo, ${firstName(u.name)}.`);return;
   }
   if(e.target.id==='request-step-1'){
     e.preventDefault();const u=currentUser();const val=Number(document.querySelector('#req-value').value),category=document.querySelector('#req-category').value;

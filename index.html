@@ -8,9 +8,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Somma" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-  <title>Somma — MVP v3.4</title>
+  <title>Somma — Comunidade colaborativa</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./styles.css?v=34" />
+  <link rel="stylesheet" href="./styles.css?v=35" />
 </head>
 <body>
   <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso ao protótipo">
@@ -50,7 +50,7 @@
       </form>
 
       <button id="demo-access" type="button" class="btn btn-secondary full demo-btn">Entrar como usuário de demonstração</button>
-      <p class="tiny muted center">MVP sem pagamentos reais, sem validação real de CPF e sem movimentação financeira.</p>
+      <p class="tiny muted center">Ambiente de demonstração: nenhum pagamento real é processado.</p>
     </div>
   </section>
 
@@ -60,7 +60,7 @@
         <p class="eyebrow">Somma</p>
         <h1 id="page-title">Início</h1>
       </div>
-      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Somma && window.Somma.openNotifications()"><span aria-hidden="true">🔔</span><span id="notify-badge" class="badge hidden">0</span></button>
+      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Somma && window.Somma.openNotifications()"><span class="bell-glyph" aria-hidden="true">●</span><span id="notify-badge" class="badge hidden">0</span></button>
     </header>
 
     <main id="app"></main>
@@ -109,6 +109,6 @@
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="./app.js?v=34"></script>
+  <script src="./app.js?v=35"></script>
 </body>
 </html>
