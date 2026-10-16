@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <title>Apoio — MVP</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Comunidade</p>
+        <h1 id="page-title">Início</h1>
+      </div>
+      <button class="icon-btn" id="notify-btn" aria-label="Notificações">🔔</button>
+    </header>
+
+    <main id="app"></main>
+
+    <nav class="bottom-nav" aria-label="Navegação principal">
+      <button data-view="home" class="nav-item active"><span>⌂</span><small>Início</small></button>
+      <button data-view="help" class="nav-item"><span>♡</span><small>Ajudar</small></button>
+      <button data-view="request" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
+      <button data-view="history" class="nav-item"><span>◷</span><small>Histórico</small></button>
+      <button data-view="profile" class="nav-item"><span>◎</span><small>Perfil</small></button>
+    </nav>
+  </div>
+
+  <dialog id="contribute-dialog" class="dialog">
+    <form method="dialog" id="contribute-form">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">Contribuição voluntária</p>
+          <h2 id="dialog-person">Ajudar</h2>
+        </div>
+        <button value="cancel" class="icon-btn">✕</button>
+      </div>
+      <p class="muted">Sua contribuição não é empréstimo, investimento ou promessa de retorno.</p>
+      <div id="amount-options" class="amount-grid"></div>
+      <label class="field">Outro valor
+        <input id="custom-amount" type="number" min="1" step="0.01" placeholder="R$ 0,00" />
+      </label>
+      <div class="summary-box">
+        <div><span>Contribuição</span><strong id="summary-contribution">R$ 0,00</strong></div>
+        <div><span>Taxa da plataforma</span><strong id="summary-fee">R$ 0,00</strong></div>
+        <div class="summary-total"><span>Total</span><strong id="summary-total">R$ 0,00</strong></div>
+      </div>
+      <button id="confirm-contribution" class="btn btn-primary" value="default" disabled>Confirmar contribuição</button>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
