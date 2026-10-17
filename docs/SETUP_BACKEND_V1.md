@@ -16,7 +16,7 @@ O Backend v1 conecta a PWA existente ao Supabase para cadastro, login, perfil, p
 | Banco | 8 tabelas de aplicação e 4 migrações aplicadas | Correção de integração aplicada com sucesso |
 | Auth | E-mail e senha habilitados, cadastro habilitado, confirmação obrigatória, acesso anônimo desabilitado | Settings verificados; login no Dashboard concluído e URLs salvas; SMTP padrão confirmado |
 | URLs do Auth | Site URL e allowlist: `https://sommaapp.github.io/` | Salvos no Dashboard; allowlist com 1 URL exata |
-| SMTP | Custom SMTP desligado (`Toggle SMTP = 0`) | Serviço e templates padrão; provedor/domínio remetente e credenciais de SMTP próprio ainda pendentes |
+| SMTP | Custom SMTP desligado (`Toggle SMTP = 0`) | Usuário confirmou ausência de domínio e serviço de e-mail. Brevo Free é a proposta para um piloto; conta, remetente, liberação e integração ainda pendentes |
 | SDK do navegador | `@supabase/supabase-js` `2.118.0` | Versão e integridade fixadas em `tooling/` |
 | CLI de referência | `supabase` `2.121.0` | Usada na preparação; não é dependência do site |
 
@@ -45,7 +45,8 @@ A suíte SQL sequencial executada no projeto hospedado passou **56 de 56 verific
 - [x] `DASHBOARD`: login concluído e configuração acessada pela UI autenticada.
 - [x] `AUTH_URLS`: Site URL salvo como `https://sommaapp.github.io/`; allowlist salva com exatamente `https://sommaapp.github.io/` (1 URL).
 - [x] `AUTH_SMTP_ESTADO`: Custom SMTP desligado na UI (`Toggle SMTP = 0`); serviço e templates padrão em uso.
-- [ ] `PENDENTE — AUTH_SMTP_PROPRIO`: escolher provedor e domínio remetente e fornecer credenciais por fluxo seguro antes de configurar SMTP próprio; manter confirmação de e-mail ativa.
+- [x] `SMTP_PREPARACAO`: ausência de domínio e serviço de e-mail confirmada pelo usuário; [guia de configuração](SMTP_EMAIL_SETUP.md) e dois templates em português preparados para revisão.
+- [ ] `PENDENTE — AUTH_SMTP_PROPRIO`: criar/acessar a conta do provedor escolhido, verificar remetente, confirmar liberação transacional e inserir credenciais por fluxo seguro; manter confirmação de e-mail ativa. A proposta inicial é Brevo Free com remetente temporário.
 - [x] `SQL_TESTS`: 56/56 verificações sequenciais no projeto hospedado em 17/10/2026 às 00:14:33 UTC; `ROLLBACK` seguido de contagem zero nas relações de usuários e uso verificadas. Relatório: `tests/backend_v1_results.json`.
 - [ ] `PENDENTE — CONCORRENCIA`: duas sessões simultâneas não testadas; não inferir esse resultado da suíte sequencial.
 - [x] `FRONTEND`: implementação e QA controlada concluídas para a branch de revisão `somma/backend-v1-integration`: 18/18 testes de lógica, 19/19 testes Chromium, zero exceções JavaScript.
@@ -138,7 +139,9 @@ Registrar o listener de Auth durante a inicialização e evitar que a navegaçã
 
 ### 4.3 SMTP confirmado e configuração ainda necessária
 
-Na UI, **Custom SMTP estava desligado** (`Toggle SMTP = 0`). O projeto usa, portanto, o serviço de envio e os templates padrão. A escolha de um provedor SMTP e do domínio remetente ainda não foi feita. As credenciais desse provedor devem ser fornecidas por fluxo seguro antes da configuração, sem publicá-las no chat, frontend ou repositório. A confirmação de e-mail deve permanecer ativa.
+Na última conferência na UI, **Custom SMTP estava desligado** (`Toggle SMTP = 0`). O projeto usa, portanto, o serviço de envio e os templates padrão. O usuário confirmou que **ainda não possui domínio nem serviço de e-mail**. A proposta inicial é avaliar **Brevo Free em um piloto limitado**, com remetente pessoal verificado e substituição temporária do endereço pela Brevo. A conta ainda não foi criada/acessada e a ativação do envio não foi confirmada. O [guia SMTP e templates](SMTP_EMAIL_SETUP.md) registra requisitos, custos, campos e critérios de aceite com fontes oficiais.
+
+Os templates em português de confirmação e recuperação estão preparados em `supabase/templates/`, mas **não foram aplicados ao Dashboard**. As credenciais do provedor devem ser inseridas por fluxo seguro, sem publicá-las no chat, frontend ou repositório. A confirmação de e-mail deve permanecer ativa. O site pode continuar em `https://sommaapp.github.io/` durante esta etapa; a compra de domínio não foi autorizada nem realizada.
 
 O SMTP padrão do Supabase só entrega para endereços que pertencem à equipe do projeto. A documentação informa limite atual de **2 mensagens por hora** e entrega em melhor esforço. Isso limita os testes e impede tratar o cadastro por e-mail como liberado ao público geral sem outro provedor SMTP. [4]
 
@@ -240,7 +243,7 @@ Os vídeos do pacote de continuidade verificavam o protótipo local no iPhone. N
 | Frontend em ambiente controlado | Lógica e fluxos de interface com SDK real e respostas de API interceptadas | 18/18 lógica e 19/19 Chromium 155.0.8059.84; zero exceções JS; relatório de QA |
 | Layout | Larguras móveis e desktop sem problemas observados na inspeção | 360, 390, 430 e 1365 px inspecionados pelo responsável |
 | URLs do Auth | Site URL e allowlist definidos no Dashboard | Salvos e conferidos: `https://sommaapp.github.io/`; 1 URL exata na allowlist |
-| SMTP efetivo | Identificar serviço de envio e templates | Custom SMTP desligado; serviço/templates padrão. Provedor, domínio remetente e credenciais de SMTP próprio ainda pendentes |
+| SMTP efetivo | Identificar serviço de envio e templates | Custom SMTP desligado; serviço/templates padrão. Brevo Free proposto para piloto, dois templates preparados; conta, liberação e integração ainda pendentes |
 | Acesso GitHub | Instalação da organização com acesso ao repositório | ChatGPT Codex Connector em `sommaapp`, ID `172255507`; seleção somente `sommaapp/sommaapp.github.io`; permissões conferidas e escrita confirmada |
 | Branch de revisão | Criar a referência remota na base correta | `somma/backend-v1-integration` criada pelo MCP sobre `619ab2f4ea5ef337dbe06b16068dfe9dd117ae1a` |
 | Publicação | Revisão aprovada publicada na `main` | Pendente; acompanhar o PR associado à branch `somma/backend-v1-integration` |
