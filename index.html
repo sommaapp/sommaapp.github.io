@@ -1,114 +1,120 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Somma" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Somma">
+  <meta name="referrer" content="no-referrer">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <title>Somma — Comunidade colaborativa</title>
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./styles.css?v=37" />
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./styles.css?v=backend1">
 </head>
 <body>
-  <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso ao protótipo">
+  <section id="boot-screen" class="auth-screen" aria-label="Carregando Somma">
+    <div class="auth-wrap center">
+      <div class="brand-mark boot-brand">S</div>
+      <h1>Somma</h1>
+      <p id="boot-message" class="muted" role="status">Conectando à comunidade…</p>
+      <button id="boot-retry" type="button" class="btn btn-primary full hidden">Tentar novamente</button>
+      <button id="boot-logout" type="button" class="btn btn-secondary full top-gap hidden">Voltar ao acesso</button>
+    </div>
+  </section>
+
+  <section id="auth-screen" class="auth-screen hidden" aria-label="Acesso à Somma">
     <div class="auth-wrap">
       <div class="brand-mark">S</div>
       <p class="eyebrow">Comunidade Somma</p>
       <h1>Pequenas ajudas.<br>Grandes diferenças.</h1>
-      <p class="auth-copy">Entre ou crie seu cadastro para testar o protótipo. Nesta versão, os dados ficam salvos apenas neste aparelho.</p>
+      <p class="auth-copy">Entre ou crie sua conta. Seus pedidos e seu histórico ficam sincronizados entre os seus aparelhos.</p>
+      <div class="legal-banner compact"><strong>Fase de testes:</strong> todas as contribuições são simuladas. Não há cobrança nem transferência de dinheiro.</div>
 
-      <div class="auth-tabs" role="tablist">
-        <button type="button" class="auth-tab active" data-auth-tab="login">Entrar</button>
-        <button type="button" class="auth-tab" data-auth-tab="signup">Criar conta</button>
+      <div id="auth-tabs" class="auth-tabs" role="tablist" aria-label="Acesso">
+        <button type="button" class="auth-tab active" data-auth-tab="login" role="tab" aria-selected="true">Entrar</button>
+        <button type="button" class="auth-tab" data-auth-tab="signup" role="tab" aria-selected="false">Criar conta</button>
       </div>
+      <p id="auth-feedback" class="notice hidden" role="status" aria-live="polite"></p>
 
       <form id="login-form" class="auth-form">
-        <label class="field">E-mail
-          <input id="login-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
-        </label>
-        <label class="field">Senha
-          <input id="login-password" type="password" autocomplete="current-password" placeholder="Sua senha" required>
-        </label>
+        <label class="field">E-mail<input id="login-email" type="email" autocomplete="email" maxlength="254" placeholder="voce@email.com" required></label>
+        <label class="field">Senha<input id="login-password" type="password" autocomplete="current-password" placeholder="Sua senha" required></label>
         <button class="btn btn-primary full" type="submit">Entrar</button>
+        <button class="link-btn full top-gap" type="button" data-auth-tab="forgot">Esqueci minha senha</button>
       </form>
 
       <form id="signup-form" class="auth-form hidden">
-        <label class="field">Nome
-          <input id="signup-name" type="text" autocomplete="name" maxlength="40" placeholder="Seu primeiro nome" required>
-        </label>
-        <label class="field">E-mail
-          <input id="signup-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
-        </label>
-        <label class="field">Senha
-          <input id="signup-password" type="password" minlength="4" autocomplete="new-password" placeholder="Crie uma senha" required>
-        </label>
-        <label class="check-row"><input id="signup-terms" type="checkbox" required><span>Li e aceito os termos do protótipo e entendo que contribuições são voluntárias e não constituem empréstimo.</span></label>
-        <button class="btn btn-primary full" type="submit">Criar cadastro</button>
+        <label class="field">Nome<input id="signup-name" type="text" autocomplete="name" minlength="2" maxlength="120" placeholder="Seu nome" required></label>
+        <label class="field">E-mail<input id="signup-email" type="email" autocomplete="email" maxlength="254" placeholder="voce@email.com" required></label>
+        <label class="field">Senha<input id="signup-password" type="password" minlength="8" autocomplete="new-password" placeholder="Pelo menos 8 caracteres" required></label>
+        <label class="check-row"><input id="signup-terms" type="checkbox" required><span>Entendo que esta é uma fase de testes, sem pagamentos reais, e que contribuições voluntárias não constituem empréstimo nem promessa de retorno.</span></label>
+        <button class="btn btn-primary full" type="submit">Criar conta</button>
       </form>
 
-      <button id="demo-access" type="button" class="btn btn-secondary full demo-btn">Entrar como usuário de demonstração</button>
-      <p class="tiny muted center">Ambiente de demonstração: nenhum pagamento real é processado.</p>
+      <form id="forgot-form" class="auth-form hidden">
+        <h2>Recuperar acesso</h2>
+        <p class="muted">Enviaremos um link para você definir uma nova senha.</p>
+        <label class="field">E-mail<input id="forgot-email" type="email" autocomplete="email" maxlength="254" placeholder="voce@email.com" required></label>
+        <button class="btn btn-primary full" type="submit">Enviar link de recuperação</button>
+        <button class="btn btn-secondary full top-gap" type="button" data-auth-tab="login">Voltar para entrar</button>
+      </form>
+
+      <form id="recovery-form" class="auth-form hidden">
+        <h2>Defina sua nova senha</h2>
+        <label class="field">Nova senha<input id="recovery-password" type="password" minlength="8" autocomplete="new-password" placeholder="Pelo menos 8 caracteres" required></label>
+        <label class="field">Repita a nova senha<input id="recovery-confirm" type="password" minlength="8" autocomplete="new-password" required></label>
+        <button class="btn btn-primary full" type="submit">Salvar nova senha</button>
+        <button class="btn btn-secondary full top-gap" type="button" id="cancel-recovery">Sair</button>
+      </form>
+
+      <button id="resend-confirmation" type="button" class="btn btn-secondary full top-gap hidden">Reenviar e-mail de confirmação</button>
+      <p class="tiny muted center">Seu cadastro antigo de demonstração era apenas local. Crie uma conta para usar esta versão.</p>
     </div>
   </section>
 
   <div id="app-shell" class="app-shell hidden">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Somma</p>
-        <h1 id="page-title">Início</h1>
-      </div>
-      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações" onclick="window.Somma && window.Somma.openNotifications()"><svg class="bell-svg" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg><span id="notify-badge" class="badge hidden">0</span></button>
+      <div><p class="eyebrow">Somma</p><h1 id="page-title">Início</h1></div>
+      <button type="button" class="icon-btn notification-button" id="notify-btn" aria-label="Notificações"><svg class="bell-svg" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg><span id="notify-badge" class="badge hidden">0</span></button>
     </header>
-
+    <div class="test-strip">Fase de testes · contribuições simuladas</div>
+    <div id="network-banner" class="network-banner hidden" role="status"></div>
+    <div id="sync-banner" class="sync-bar"><span id="sync-label" role="status">Atualizado agora</span><button id="refresh-data" class="link-btn" type="button">Atualizar</button></div>
+    <div id="pending-banner" class="notice pending-banner hidden"></div>
     <main id="app"></main>
-
     <nav class="bottom-nav" aria-label="Navegação principal">
-      <button type="button" data-view="home" onclick="window.Somma && window.Somma.go('home')" class="nav-item active"><span>⌂</span><small>Início</small></button>
-      <button type="button" data-view="help" onclick="window.Somma && window.Somma.go('help')" class="nav-item"><span>♡</span><small>Ajudar</small></button>
-      <button type="button" data-view="request" onclick="window.Somma && window.Somma.go('request')" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
-      <button type="button" data-view="history" onclick="window.Somma && window.Somma.go('history')" class="nav-item"><span>◷</span><small>Histórico</small></button>
-      <button type="button" data-view="profile" onclick="window.Somma && window.Somma.go('profile')" class="nav-item"><span>◎</span><small>Perfil</small></button>
+      <button type="button" data-view="home" class="nav-item active"><span>⌂</span><small>Início</small></button>
+      <button type="button" data-view="help" class="nav-item"><span>♡</span><small>Ajudar</small></button>
+      <button type="button" data-view="request" class="nav-item primary"><span>＋</span><small>Pedir apoio</small></button>
+      <button type="button" data-view="history" class="nav-item"><span>◷</span><small>Histórico</small></button>
+      <button type="button" data-view="profile" class="nav-item"><span>◎</span><small>Perfil</small></button>
     </nav>
   </div>
 
-  <dialog id="contribute-dialog" class="dialog">
-    <form method="dialog" id="contribute-form">
-      <div class="dialog-head">
-        <div><p class="eyebrow">Contribuição voluntária</p><h2 id="dialog-person">Ajudar</h2></div>
-        <button value="cancel" class="icon-btn" aria-label="Fechar">✕</button>
-      </div>
-      <p class="muted">Sua contribuição não é empréstimo, investimento ou promessa de retorno.</p>
+  <dialog id="contribute-dialog" class="dialog" aria-labelledby="dialog-person">
+    <form id="contribute-form">
+      <div class="dialog-head"><div><p class="eyebrow">Contribuição simulada</p><h2 id="dialog-person">Ajudar</h2></div><button type="button" id="close-contribution" class="icon-btn" aria-label="Fechar">✕</button></div>
+      <p class="muted">Sua contribuição é voluntária. Não é empréstimo, investimento ou promessa de retorno.</p>
+      <div id="contribution-feedback" class="notice hidden" role="status"></div>
       <div id="amount-options" class="amount-grid"></div>
-      <label class="field">Outro valor
-        <input id="custom-amount" type="number" min="1" step="0.01" inputmode="decimal" placeholder="R$ 0,00" />
-      </label>
+      <label class="field">Outro valor<input id="custom-amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="R$ 0,00"></label>
       <div class="summary-box">
-        <div><span>Contribuição</span><strong id="summary-contribution">R$ 0,00</strong></div>
-        <div><span>Taxa da plataforma</span><strong id="summary-fee">R$ 0,00</strong></div>
-        <div class="summary-total"><span>Total</span><strong id="summary-total">R$ 0,00</strong></div>
+        <div><span>Contribuição simulada</span><strong id="summary-contribution">R$ 0,00</strong></div>
+        <div><span>Taxa simulada</span><strong id="summary-fee">R$ 0,00</strong></div>
+        <div class="summary-total"><span>Total simulado</span><strong id="summary-total">R$ 0,00</strong></div>
       </div>
-      <p class="legal-note">Ao confirmar, você declara ciência de que esta contribuição é voluntária e não gera direito de restituição pelo beneficiário.</p>
-      <button id="confirm-contribution" class="btn btn-primary full" value="default" disabled>Confirmar contribuição</button>
+      <p class="legal-note">Nesta fase, confirmar registra apenas uma simulação. Nenhum valor será cobrado ou transferido.</p>
+      <button id="confirm-contribution" class="btn btn-primary full" type="submit" disabled>Confirmar simulação</button>
     </form>
   </dialog>
 
-  <dialog id="details-dialog" class="dialog">
-    <div class="dialog-panel" id="details-content"></div>
-  </dialog>
-
-  <dialog id="notifications-dialog" class="dialog">
-    <div class="dialog-panel">
-      <div class="dialog-head"><div><p class="eyebrow">Central</p><h2>Notificações</h2></div><button class="icon-btn close-dialog" data-dialog="notifications-dialog" onclick="window.Somma && window.Somma.closeDialog('notifications-dialog')" aria-label="Fechar">✕</button></div>
-      <div id="notifications-list" class="list"></div>
-      <button type="button" id="mark-read" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
-    </div>
-  </dialog>
-
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-
-  <script src="./app.js?v=37"></script>
+  <noscript><p class="notice">Ative o JavaScript para usar a Somma.</p></noscript>
+  <script src="./config.js?v=backend1" defer></script>
+  <script src="./vendor/supabase-2.118.0.min.js" defer></script>
+  <script src="./backend.js?v=backend1" defer></script>
+  <script src="./app.js?v=backend1" defer></script>
 </body>
 </html>

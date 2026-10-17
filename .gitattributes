@@ -1,0 +1,5 @@
+# Preserve the exact bytes and upstream whitespace of the pinned SDK/licenses.
+vendor/*.min.js binary
+vendor/*.LICENSE.txt -text -whitespace
+vendor/*.NOTICES.txt -text -whitespace
+icons/*.png binary

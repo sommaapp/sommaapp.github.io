@@ -1,441 +1,851 @@
-const STORAGE_KEY='somma_mvp_v37_state';
-const LEGACY_STORAGE_KEY='somma_mvp_v36_state';
-const LEGACY_STORAGE_KEY_V35='somma_mvp_v35_state';
-const LEGACY_STORAGE_KEY_V34='somma_mvp_v34_state';
-const LEGACY_STORAGE_KEY_SOMMA_V34='apoio_mvp_v33_state';
-const LEGACY_STORAGE_KEY_2='apoio_mvp_v32_state';
-const LEGACY_STORAGE_KEY_OLD='apoio_mvp_v3_state';
-const LEGACY_STORAGE_KEY_V2='apoio_mvp_v2_state';
-const SESSION_KEY='somma_mvp_v37_session';
-const LEGACY_SESSION_KEY='somma_mvp_v36_session';
-const LEGACY_SESSION_KEY_V35='somma_mvp_v35_session';
-const LEGACY_SESSION_KEY_V34='somma_mvp_v34_session';
-const LEGACY_SESSION_KEY_SOMMA_V34='apoio_mvp_v33_session';
-const LEGACY_SESSION_KEY_2='apoio_mvp_v32_session';
-const LEGACY_SESSION_KEY_OLD='apoio_mvp_v3_session';
-const LEGACY_SESSION_KEY_V2='apoio_mvp_v2_session';
+'use strict';
 
-const defaultState={
-  view:'home',
-  historyTab:'all',
-  requestStep:1,
-  requestDraft:{value:'',category:'',description:'',time:'48 horas'},
-  users:[],
-  user:null,
-  requests:[
-    {id:1,name:'Lucas M.',category:'Combustível',description:'Preciso completar o combustível para trabalhar amanhã.',goal:50,raised:37,helpers:14,verified:true,time:'8h restantes',createdBy:'demo-lucas',createdAt:'Hoje'},
-    {id:2,name:'Ana C.',category:'Transporte',description:'Preciso de transporte para uma consulta amanhã cedo.',goal:40,raised:24,helpers:9,verified:true,time:'15h restantes',createdBy:'demo-ana',createdAt:'Hoje'},
-    {id:3,name:'Rafael S.',category:'Alimentação',description:'Preciso completar uma compra básica para hoje.',goal:60,raised:49,helpers:22,verified:true,time:'23h restantes',createdBy:'demo-rafael',createdAt:'Hoje'}
-  ],
-  history:[],
-  notifications:[
-    {id:1,title:'Bem-vindo à comunidade',text:'Este é um protótipo. Nenhum pagamento real será processado.',time:'Agora',read:false},
-    {id:2,title:'Regra importante',text:'Contribuições são voluntárias e não constituem empréstimo.',time:'Hoje',read:false}
-  ],
-  activeRequest:null,
-  selectedAmount:0
-};
+(function () {
+  const backend = window.SommaBackend;
+  const config = window.SOMMA_CONFIG;
+  const $ = selector => document.querySelector(selector);
+  const app = $('#app');
+  const dialog = $('#contribute-dialog');
+  const CATEGORIES = ['Combustível', 'Alimentação', 'Transporte', 'Medicamentos', 'Conta essencial', 'Trabalho', 'Emergência', 'Outro'];
+  const VIEWS = new Set(['home', 'help', 'request', 'history', 'profile', 'detail', 'notifications']);
+  const INTENT_KEY = 'somma_backend_v1_pending_contribution';
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const initialHash = location.hash;
+  let legacyCredentialsCleaned = false;
+  const state = {
+    session: null, data: null, publicProfiles: new Map(), view: 'home', detailId: null,
+    historyTab: 'all', requestStep: 1,
+    draft: { value: '', category: '', description: '', durationHours: 48 },
+    loading: false, loadedAt: 0, stale: false, generation: 0, loadPromise: null,
+    recovery: false, confirmEmail: '', authMode: 'login',
+    modalRequestId: null, selectedCents: 0, contributionIntent: null,
+    contributing: false, publishing: false, routeDepth: 0
+  };
 
-let state=loadState();
-const app=document.querySelector('#app');
-const pageTitle=document.querySelector('#page-title');
-const appShell=document.querySelector('#app-shell');
-const authScreen=document.querySelector('#auth-screen');
-const dlg=document.querySelector('#contribute-dialog');
-const detailsDlg=document.querySelector('#details-dialog');
-const notificationsDlg=document.querySelector('#notifications-dialog');
-const toastEl=document.querySelector('#toast');
-const brl=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const feeFor=v=>Math.round((0.20+Number(v)*0.05)*100)/100;
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const brl = cents => (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const firstName = name => String(name || '').trim().split(/\s+/)[0] || 'Membro';
+  const feeFor = cents => cents > 0 ? 20 + Math.ceil(cents / 20) : 0;
+  const fullDate = value => value ? new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const joinedDate = value => value ? new Date(value).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : '—';
+  const currentUser = () => state.data?.profile;
+  const requestById = id => state.data?.requests.find(request => request.id === id);
+  const personName = id => state.publicProfiles.get(id)?.public_name || 'Membro Somma';
+  const levelName = code => state.data?.levels.find(level => level.code === code)?.display_name || 'Em análise';
+  const hasSession = () => Boolean(state.session?.user?.id);
+  const effectiveStatus = request => request.status === 'active' && request.expires_at && Date.parse(request.expires_at) <= Date.now() ? 'expired' : request.status;
+  const remainingFor = request => Math.max(0, request.goal_cents - request.raised_cents);
 
-const LEVELS={
-  initial:{key:'initial',name:'Inicial',limitPerRequest:50,monthlyLimit:150,description:'Primeiros passos na comunidade.'},
-  verified:{key:'verified',name:'Verificado',limitPerRequest:100,monthlyLimit:300,description:'Identidade validada e conta regular.'},
-  community:{key:'community',name:'Comunidade',limitPerRequest:150,monthlyLimit:450,description:'Bom histórico de uso e participação.'},
-  trusted:{key:'trusted',name:'Confiável',limitPerRequest:200,monthlyLimit:600,description:'Histórico consistente e sem ocorrências.'},
-  special:{key:'special',name:'Especial',limitPerRequest:300,monthlyLimit:null,description:'Faixa excepcional, sujeita a análise individual.'}
-};
-const LEVEL_ORDER=['initial','verified','community','trusted','special'];
-function levelInfo(u){
-  const key=(u&&LEVELS[u.level])?u.level:(u?.verified?'verified':'initial');
-  return LEVELS[key];
-}
-function nextLevelInfo(u){
-  const current=levelInfo(u);const i=LEVEL_ORDER.indexOf(current.key);
-  return i>=0&&i<LEVEL_ORDER.length-1?LEVELS[LEVEL_ORDER[i+1]]:null;
-}
-function normalizeUserProgression(u){
-  if(!u)return u;
-  if(!u.level||!LEVELS[u.level])u.level=u.verified?'verified':'initial';
-  if(u.verified&&u.level==='initial')u.level='verified';
-  const info=LEVELS[u.level];
-  u.limitPerRequest=info.limitPerRequest;
-  if(info.monthlyLimit!=null)u.monthlyLimit=info.monthlyLimit;
-  else if(!Number(u.monthlyLimit))u.monthlyLimit=600;
-  return u;
-}
+  function parseCents(value) {
+    const text = String(value || '').trim().replace(',', '.');
+    if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null;
+    const [whole, decimal = ''] = text.split('.');
+    const cents = Number(whole) * 100 + Number(decimal.padEnd(2, '0'));
+    return Number.isSafeInteger(cents) ? cents : null;
+  }
 
-function cloneDefault(){return JSON.parse(JSON.stringify(defaultState));}
-function migratePublishedRequests(data){
-  if(!data||!Array.isArray(data.history))return;
-  const corrections={};
-  data.history.forEach(h=>{
-    if(h&&h.type==='Recebeu apoio'&&h.person==='Pedido publicado'&&Number(h.value||0)===0){
-      h.type='Pedido publicado';
-      if(h.userId)corrections[h.userId]=(corrections[h.userId]||0)+1;
+  function uuid() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  function statusLabel(request) {
+    return ({ active: 'Em arrecadação', completed: 'Meta atingida', cancelled: 'Cancelado', suspended: 'Suspenso', expired: 'Prazo encerrado' })[effectiveStatus(request)] || 'Em análise';
+  }
+
+  function remainingTime(request) {
+    if (effectiveStatus(request) !== 'active') return statusLabel(request);
+    if (!request.expires_at) return 'Em arrecadação';
+    const minutes = Math.max(1, Math.ceil((Date.parse(request.expires_at) - Date.now()) / 60000));
+    return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}min restantes` : `${minutes}min restantes`;
+  }
+
+  function summary() {
+    const userId = state.session.user.id;
+    const requests = state.data.requests;
+    const own = requests.filter(request => request.user_id === userId);
+    const ownIds = new Set(own.map(request => request.id));
+    const confirmed = state.data.contributions.filter(item => item.status === 'simulated_confirmed');
+    const given = confirmed.filter(item => item.contributor_user_id === userId);
+    const received = confirmed.filter(item => ownIds.has(item.request_id));
+    const now = new Date();
+    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    const receivedMonth = received.filter(item => Date.parse(item.created_at) >= monthStart).reduce((sum, item) => sum + item.amount_cents, 0);
+    const helpedUsers = new Set(given.map(item => requestById(item.request_id)?.user_id).filter(Boolean));
+    const latest = own.reduce((last, request) => Math.max(last, Date.parse(request.created_at)), 0);
+    return {
+      own, given, received, receivedMonth,
+      activeOwn: own.find(request => effectiveStatus(request) === 'active'),
+      helped: helpedUsers.size,
+      contributed: given.reduce((sum, item) => sum + item.amount_cents, 0),
+      nextRequestAt: latest ? latest + 7 * 86400000 : 0,
+      available: currentUser().period_limit_cents === null ? null : Math.max(0, currentUser().period_limit_cents - receivedMonth)
+    };
+  }
+
+  function toast(message) {
+    const element = $('#toast');
+    element.textContent = message;
+    element.classList.remove('hidden');
+    clearTimeout(element._timer);
+    element._timer = setTimeout(() => element.classList.add('hidden'), 4500);
+  }
+
+  function feedback(selector, message, success = false) {
+    const element = $(selector);
+    if (!element) return;
+    element.textContent = message || '';
+    element.classList.toggle('hidden', !message);
+    element.classList.toggle('notice-success', Boolean(success));
+  }
+
+  function errorMessage(error) {
+    if (!navigator.onLine) return 'Você está sem conexão. Conecte-se à internet e tente novamente.';
+    const key = `${error?.code || ''} ${error?.message || ''}`;
+    if (/invalid login credentials|invalid credentials/i.test(key)) return 'E-mail ou senha incorretos.';
+    if (/email not confirmed/i.test(key)) return 'Confirme seu e-mail antes de entrar. Verifique também a caixa de spam.';
+    const messages = {
+      invalid_credentials: 'E-mail ou senha incorretos.',
+      email_not_confirmed: 'Confirme seu e-mail antes de entrar. Verifique também a caixa de spam.',
+      weak_password: 'Escolha uma senha mais forte, com pelo menos 8 caracteres.',
+      same_password: 'Escolha uma senha diferente da senha atual.',
+      email_address_invalid: 'Confira o endereço de e-mail informado.',
+      email_address_not_authorized: 'O envio de e-mails de acesso ainda precisa ser habilitado para este endereço pela Somma.',
+      over_email_send_rate_limit: 'Muitos e-mails foram solicitados. Aguarde um pouco antes de tentar novamente.',
+      over_request_rate_limit: 'Muitas tentativas em pouco tempo. Aguarde e tente novamente.',
+      user_already_exists: 'Não foi possível criar essa conta. Tente entrar ou recuperar sua senha.',
+      signup_disabled: 'Novos cadastros estão temporariamente indisponíveis.',
+      otp_expired: 'Este link expirou ou já foi usado. Solicite um novo link de acesso.',
+      session_not_found: 'Sua sessão expirou. Entre novamente.',
+      refresh_token_not_found: 'Sua sessão expirou. Entre novamente.',
+      account_not_active: 'Sua conta não está liberada para esta ação.',
+      recipient_not_active: 'Este pedido não está disponível para receber contribuições.',
+      beneficiary_not_active: 'Este pedido não está disponível para receber contribuições.',
+      request_below_minimum: 'O valor mínimo por pedido é R$ 20,00.',
+      request_limit_exceeded: 'Esse valor ultrapassa o limite atual da sua conta.',
+      active_request_already_exists: 'Você já tem um pedido em arrecadação.',
+      request_interval_not_elapsed: 'Ainda não passaram 7 dias desde seu último pedido.',
+      period_limit_exceeded: 'Essa ação ultrapassa o limite mensal disponível.',
+      period_limit_not_configured: 'Seu limite mensal ainda está em análise.',
+      period_limit_pending: 'Seu limite mensal ainda está em análise.',
+      recipient_period_limit_exceeded: 'O limite mensal deste beneficiário já foi atingido.',
+      request_not_found: 'Este pedido não está disponível.',
+      request_not_active: 'Este pedido já não está em arrecadação. Atualize para ver o status.',
+      request_expired: 'O prazo deste pedido terminou.',
+      self_contribution_not_allowed: 'Você não pode contribuir para seu próprio pedido.',
+      contribution_exceeds_remaining_goal: 'O valor restante mudou. Atualize o pedido e confira o novo valor.',
+      invalid_category: 'Escolha uma das categorias disponíveis.',
+      invalid_duration: 'Escolha um prazo de 24 ou 48 horas.',
+      invalid_duration_hours: 'Escolha um prazo de 24 ou 48 horas.',
+      invalid_full_name: 'Informe um nome entre 2 e 120 caracteres.',
+      intent_conflict: 'Não foi possível conferir esta contribuição. Atualize a página antes de continuar.'
+    };
+    const codes = new Set(key.split(/[^a-z0-9_]+/i));
+    for (const [code, message] of Object.entries(messages)) if (codes.has(code)) return message;
+    if (/AbortError|aborted|Failed to fetch|NetworkError|fetch failed|timeout/i.test(key)) return 'A conexão demorou a responder. Confira a internet e tente novamente.';
+    if (error?.code === '23505') return 'Esta ação já foi registrada. Atualize para conferir o resultado.';
+    if (error?.code === '23514') return 'Confira os valores e o prazo informados.';
+    return 'Não foi possível concluir agora. Tente novamente em alguns instantes.';
+  }
+
+  function showBoot(message, retry = false) {
+    $('#boot-screen').classList.remove('hidden');
+    $('#auth-screen').classList.add('hidden');
+    $('#app-shell').classList.add('hidden');
+    $('#boot-message').textContent = message;
+    $('#boot-retry').classList.toggle('hidden', !retry);
+    $('#boot-logout').classList.toggle('hidden', !hasSession());
+  }
+
+  function authMode(mode, clear = true) {
+    state.authMode = mode;
+    $('#boot-screen').classList.add('hidden');
+    $('#app-shell').classList.add('hidden');
+    $('#auth-screen').classList.remove('hidden');
+    $('#auth-tabs').classList.toggle('hidden', mode === 'recovery');
+    document.querySelectorAll('.auth-form').forEach(form => form.classList.toggle('hidden', form.id !== `${mode}-form`));
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.authTab === mode);
+      tab.setAttribute('aria-selected', String(tab.dataset.authTab === mode));
+    });
+    if (clear) feedback('#auth-feedback', '');
+    $('#resend-confirmation').classList.add('hidden');
+  }
+
+  function clearAccount() {
+    state.generation += 1;
+    state.session = null;
+    state.data = null;
+    state.publicProfiles = new Map();
+    state.loadedAt = 0;
+    state.loading = false;
+    state.loadPromise = null;
+    state.recovery = false;
+    state.contributionIntent = null;
+    state.modalRequestId = null;
+    state.selectedCents = 0;
+    state.view = 'home';
+    state.detailId = null;
+    resetDraft();
+    closeDialogOnly();
+    app.innerHTML = '';
+    $('#notify-badge').classList.add('hidden');
+    $('#pending-banner').classList.add('hidden');
+    document.querySelectorAll('input[type="password"]').forEach(input => { input.value = ''; });
+    history.replaceState({ somma: true, view: 'home', depth: 0 }, '', location.pathname + location.search + '#home');
+    state.routeDepth = 0;
+    authMode('login');
+  }
+
+  function restoreIntent() {
+    if (state.contributionIntent || !hasSession()) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(INTENT_KEY) || 'null');
+      if (saved?.userId === state.session.user.id && UUID.test(saved.key) && UUID.test(saved.requestId) && Number.isSafeInteger(saved.amountCents) && saved.amountCents > 0) state.contributionIntent = saved;
+    } catch (_) { /* An unavailable browser store never grants access. */ }
+  }
+
+  function saveIntent(intent) {
+    state.contributionIntent = intent;
+    try {
+      if (intent) sessionStorage.setItem(INTENT_KEY, JSON.stringify(intent));
+      else sessionStorage.removeItem(INTENT_KEY);
+    } catch (_) { /* Keep the same intention in memory if storage is disabled. */ }
+    updatePending();
+  }
+
+  function updatePending() {
+    const element = $('#pending-banner');
+    element.classList.toggle('hidden', !state.contributionIntent);
+    if (state.contributionIntent) element.innerHTML = 'Uma simulação aguarda confirmação. <button class="link-btn" type="button" id="resume-contribution">Conferir registro</button>';
+  }
+
+  function updateSync() {
+    $('#refresh-data').disabled = state.loading || !navigator.onLine;
+    $('#sync-label').textContent = state.loading ? 'Atualizando…' : state.stale ? 'Não foi possível atualizar agora' : state.loadedAt ? `Atualizado às ${new Date(state.loadedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Aguardando conexão';
+    const banner = $('#network-banner');
+    banner.classList.toggle('hidden', navigator.onLine);
+    banner.textContent = navigator.onLine ? '' : 'Sem conexão. Entre na internet para atualizar ou registrar ações.';
+    if (state.modalRequestId) updateContributionSummary();
+  }
+
+  async function loadData({ initial = false } = {}) {
+    if (!hasSession()) return;
+    if (state.loadPromise) return state.loadPromise;
+    const userId = state.session.user.id;
+    const generation = state.generation;
+    state.loading = true;
+    if (initial || !state.data) showBoot('Carregando seus pedidos e seu histórico…');
+    updateSync();
+    const task = (async () => {
+      try {
+        const data = await backend.snapshot(userId);
+        if (generation !== state.generation || state.session?.user.id !== userId) return;
+        state.data = data;
+        state.publicProfiles = new Map(data.publicProfiles.map(profile => [profile.id, profile]));
+        state.publicProfiles.set(userId, { id: userId, public_name: data.profile.public_name, level: data.profile.level });
+        state.loadedAt = Date.now();
+        state.stale = false;
+        restoreIntent();
+        if (!state.recovery) {
+          $('#boot-screen').classList.add('hidden');
+          $('#auth-screen').classList.add('hidden');
+          $('#app-shell').classList.remove('hidden');
+          render();
+        }
+      } catch (error) {
+        if (generation !== state.generation) return;
+        state.stale = true;
+        if (!state.data) showBoot(errorMessage(error), true);
+        else toast(errorMessage(error));
+        throw error;
+      } finally {
+        if (generation === state.generation) {
+          state.loading = false;
+          state.loadPromise = null;
+          updateSync();
+        }
+      }
+    })();
+    state.loadPromise = task;
+    return task;
+  }
+
+  async function receiveSession(session, event = '') {
+    if (!session) { clearAccount(); return; }
+    const changed = state.session?.user.id !== session.user.id;
+    if (changed) {
+      state.generation += 1;
+      state.loadPromise = null;
+      state.data = null;
+      state.contributionIntent = null;
+      state.publicProfiles = new Map();
     }
-  });
-  if(Array.isArray(data.users)){
-    data.users.forEach(u=>{
-      const n=corrections[u.id]||0;
-      if(n)u.received=Math.max(0,Number(u.received||0)-n);
+    state.session = session;
+    if (event === 'PASSWORD_RECOVERY' || state.recovery) {
+      state.recovery = true;
+      authMode('recovery');
+      return;
+    }
+    if (changed || !state.data) {
+      await loadData({ initial: true });
+      if (state.data && !state.recovery) applyRoute(readRoute(), changed);
+    }
+  }
+
+  function removeLegacyPasswords() {
+    if (legacyCredentialsCleaned) return;
+    legacyCredentialsCleaned = true;
+    const keys = [
+      'somma_mvp_v37_state', 'somma_mvp_v36_state', 'somma_mvp_v35_state', 'somma_mvp_v34_state',
+      'apoio_mvp_v33_state', 'apoio_mvp_v32_state', 'apoio_mvp_v3_state', 'apoio_mvp_v2_state'
+    ];
+    // Earlier demos stored passwords in their local JSON. Remove those fields
+    // without importing demo accounts or changing any other local records.
+    for (const key of keys) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') continue;
+        let changed = false;
+        const users = [data.user, ...(Array.isArray(data.users) ? data.users : [])];
+        for (const user of users) {
+          if (user && typeof user === 'object' && Object.prototype.hasOwnProperty.call(user, 'password')) {
+            delete user.password;
+            changed = true;
+          }
+        }
+        if (changed) localStorage.setItem(key, JSON.stringify(data));
+      } catch (_) { /* Invalid or unavailable local storage never blocks access. */ }
+    }
+  }
+
+  async function bootstrap() {
+    removeLegacyPasswords();
+    if (!backend || backend.initializationError) {
+      showBoot(backend?.initializationError || 'Não foi possível iniciar a Somma. Atualize a página.', true);
+      return;
+    }
+    try {
+      const { data, error } = await backend.client.auth.getSession();
+      if (error) throw error;
+      await receiveSession(data.session);
+      const authError = new URLSearchParams(initialHash.slice(1)).get('error_code');
+      if (authError && !data.session) feedback('#auth-feedback', errorMessage({ code: authError }));
+    } catch (error) { showBoot(errorMessage(error), true); }
+  }
+
+  function readRoute() {
+    if (history.state?.somma && VIEWS.has(history.state.view)) return history.state;
+    const [part, id] = location.hash.replace(/^#/, '').split('/');
+    if (part === 'detail' && UUID.test(id || '')) return { view: 'detail', requestId: id, depth: 0 };
+    if (part === 'contribute' && UUID.test(id || '')) return { view: 'detail', requestId: id, modalRequestId: id, depth: 0 };
+    return { view: VIEWS.has(part) && part !== 'detail' ? part : 'home', depth: 0 };
+  }
+
+  function routeHash(route) {
+    if (route.modalRequestId) return `#contribute/${route.modalRequestId}`;
+    return route.view === 'detail' ? `#detail/${route.requestId}` : `#${route.view}`;
+  }
+
+  function applyRoute(route, scroll = true) {
+    if (!hasSession() || !state.data || state.recovery) return;
+    if (state.view === 'request' && route.view !== 'request' && !state.publishing) resetDraft();
+    state.view = VIEWS.has(route.view) ? route.view : 'home';
+    state.detailId = UUID.test(route.requestId || '') ? route.requestId : null;
+    state.routeDepth = Number(route.depth || 0);
+    const requestedModal = route.modalRequestId;
+    if (!requestedModal) { state.modalRequestId = null; closeDialogOnly(); }
+    render();
+    if (requestedModal) setupContribution(requestedModal);
+    if (scroll) window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  function navigate(view, requestId = null, replace = false, modalRequestId = null) {
+    if (!VIEWS.has(view) || !hasSession()) return;
+    const route = { somma: true, view, requestId, modalRequestId, depth: replace ? state.routeDepth : state.routeDepth + 1 };
+    const current = readRoute();
+    if (!replace && routeHash(route) === routeHash(current)) { applyRoute(current); return; }
+    history[replace ? 'replaceState' : 'pushState'](route, '', location.pathname + location.search + routeHash(route));
+    applyRoute(route);
+    if (!modalRequestId && view !== 'request' && view !== 'profile' && Date.now() - state.loadedAt > 30000) loadData().catch(() => {});
+  }
+
+  function back() {
+    if (state.contributing) { toast('Aguarde a confirmação da simulação.'); return; }
+    if (state.routeDepth > 0) history.back();
+    else navigate('home', null, true);
+  }
+
+  function requestCard(request) {
+    const pct = Math.min(100, request.raised_cents / request.goal_cents * 100);
+    const remaining = remainingFor(request);
+    const own = request.user_id === state.session.user.id;
+    const available = effectiveStatus(request) === 'active' && remaining > 0;
+    const name = personName(request.user_id);
+    return `<article class="card">
+      <div class="row between card-heading"><div class="row"><div class="avatar">${escapeHtml(name[0] || 'S')}</div><div><strong>${escapeHtml(name)}</strong><div class="tiny muted">${escapeHtml(remainingTime(request))}</div></div></div><div class="row mini-gap">${own ? '<span class="pill own-pill">Seu pedido</span>' : ''}<span class="pill">${escapeHtml(request.category)}</span></div></div>
+      <p>${escapeHtml(request.description)}</p>
+      <div class="progress" aria-label="${Math.round(pct)}% da meta simulada"><div style="width:${pct}%"></div></div>
+      <div class="money-row"><strong>${brl(request.raised_cents)} simulados</strong><span class="muted">Meta ${brl(request.goal_cents)}</span></div>
+      <div class="tiny muted top-mini">${request.helper_count} ${request.helper_count === 1 ? 'pessoa ajudou' : 'pessoas ajudaram'} · faltam ${brl(remaining)}</div>
+      <div class="actions"><button type="button" class="btn btn-primary" data-contribute="${escapeHtml(request.id)}" ${own || !available ? 'disabled' : ''}>${own ? 'Seu pedido' : available ? 'Ajudar agora' : escapeHtml(statusLabel(request))}</button><button type="button" class="btn btn-secondary" data-details="${escapeHtml(request.id)}">Ver pedido</button></div>
+    </article>`;
+  }
+
+  function renderHome() {
+    const user = currentUser();
+    $('#page-title').textContent = 'Início';
+    const active = state.data.requests.filter(request => effectiveStatus(request) === 'active');
+    const primary = active[0];
+    const almost = active.filter(request => request.id !== primary?.id).sort((a, b) => remainingFor(a) - remainingFor(b))[0];
+    const completed = state.data.requests.filter(request => request.status === 'completed').length;
+    app.innerHTML = `<div class="content">
+      <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(firstName(user.full_name))}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
+      <div class="stats"><div class="stat"><strong>${active.length}</strong><span>pedidos ativos</span></div><div class="stat"><strong>${completed}</strong><span>metas concluídas com você</span></div><div class="stat stat-money"><strong>${brl(100).replace(/\s/, ' ')}</strong><span>para começar</span></div></div>
+      <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
+      <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-view="help">Ver todos</button></div>
+      ${primary ? requestCard(primary) : '<section class="empty-state"><div class="empty-icon">♡</div><h2>A comunidade começa com pessoas</h2><p>Ainda não há pedidos ativos. Os novos pedidos aparecerão aqui.</p><button type="button" class="btn btn-primary full" data-view="request">Pedir apoio</button></section>'}
+      ${almost ? `<div class="section-head"><h2>Quase lá</h2></div>${requestCard(almost)}` : ''}
+    </div>`;
+  }
+
+  function renderHelp() {
+    $('#page-title').textContent = 'Ajudar';
+    const requests = state.data.requests.filter(request => effectiveStatus(request) === 'active');
+    app.innerHTML = `<div class="content"><div class="section-head"><div><h2>Pedidos ativos</h2><p class="muted tiny">Escolha livremente quem você quer apoiar.</p></div></div><div class="legal-banner compact"><strong>Sem obrigação de retorno.</strong> Ajudar hoje não cria direito automático de receber amanhã.</div>${requests.length ? requests.map(requestCard).join('') : '<section class="empty-state"><div class="empty-icon">♡</div><h2>Nenhum pedido ativo</h2><p>Novos pedidos aparecerão aqui.</p></section>'}</div>`;
+  }
+
+  function resetDraft() {
+    state.requestStep = 1;
+    state.draft = { value: '', category: '', description: '', durationHours: 48 };
+  }
+
+  function renderRequest() {
+    $('#page-title').textContent = 'Pedir apoio';
+    const user = currentUser();
+    const limits = summary();
+    let blocked = '';
+    if (user.account_status !== 'active') blocked = 'Sua conta não está liberada para criar pedidos.';
+    else if (limits.activeOwn) blocked = 'Você já tem um pedido em arrecadação. Acompanhe esse pedido antes de criar outro.';
+    else if (user.period_limit_cents === null) blocked = 'Seu limite mensal está pendente de análise. Um novo pedido ficará disponível quando esse limite for definido.';
+    else if (limits.nextRequestAt > Date.now()) blocked = `O próximo pedido ficará disponível em ${fullDate(limits.nextRequestAt)}. O intervalo mínimo é de 7 dias.`;
+    else if (limits.available < 2000) blocked = 'Seu limite disponível neste mês é menor que o valor mínimo de R$ 20,00.';
+    if (blocked) {
+      app.innerHTML = `<div class="content"><section class="empty-state"><div class="empty-icon">⏳</div><h2>Vamos acompanhar seus limites</h2><p>${escapeHtml(blocked)}</p>${limits.activeOwn ? `<button class="btn btn-primary full" type="button" data-details="${limits.activeOwn.id}">Ver meu pedido</button>` : ''}<button class="btn btn-secondary full top-gap" type="button" data-view="profile">Ver meus limites</button></section></div>`;
+      return;
+    }
+    const draft = state.draft;
+    const step = state.requestStep;
+    const stepper = `<div class="stepper">${[1, 2, 3].map(number => `<span class="${number <= step ? 'active' : ''}"></span>`).join('')}</div><p class="eyebrow">Etapa ${step} de 3</p>`;
+    if (step === 1) {
+      app.innerHTML = `<div class="content">${stepper}<h2 class="flow-title">Defina sua necessidade</h2><div class="request-limit-highlight"><span>Nível ${escapeHtml(levelName(user.level))} · limite por pedido</span><strong>${brl(user.request_limit_cents)}</strong><small>Disponível neste mês: ${brl(limits.available)}</small></div><div class="notice">Valor mínimo de R$ 20,00. Limite mensal: ${brl(user.period_limit_cents)}.</div><p id="request-feedback" class="notice hidden" role="status"></p><form class="form-card" id="request-step-1"><label class="field">Quanto você precisa?<input id="req-value" type="number" min="20" max="${Math.min(user.request_limit_cents, limits.available) / 100}" step="0.01" inputmode="decimal" value="${escapeHtml(draft.value)}" placeholder="Ex.: 50" required></label><label class="field">Categoria<select id="req-category" required><option value="">Selecione</option>${CATEGORIES.map(category => `<option value="${escapeHtml(category)}" ${draft.category === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select></label><button type="submit" class="btn btn-primary full">Continuar</button></form></div>`;
+    } else if (step === 2) {
+      app.innerHTML = `<div class="content">${stepper}<h2 class="flow-title">Conte o essencial</h2><p id="request-feedback" class="notice hidden" role="status"></p><form class="form-card" id="request-step-2"><label class="field">Descreva sua necessidade<textarea id="req-description" maxlength="180" placeholder="Explique sua necessidade de forma objetiva." required>${escapeHtml(draft.description)}</textarea><span class="tiny muted"><span id="desc-count">${draft.description.length}</span>/180 · Evite dados pessoais, endereço ou documentos.</span></label><label class="field">Prazo<select id="req-time"><option value="24" ${draft.durationHours === 24 ? 'selected' : ''}>24 horas</option><option value="48" ${draft.durationHours === 48 ? 'selected' : ''}>48 horas</option></select></label><div class="two-actions"><button type="button" class="btn btn-secondary" data-request-step="1">Voltar</button><button type="submit" class="btn btn-primary">Continuar</button></div></form></div>`;
+    } else {
+      app.innerHTML = `<div class="content">${stepper}<h2 class="flow-title">Revise antes de publicar</h2><section class="card review-card"><div class="review-row"><span>Valor</span><strong>${brl(parseCents(draft.value))}</strong></div><div class="review-row"><span>Categoria</span><strong>${escapeHtml(draft.category)}</strong></div><div class="review-row"><span>Prazo</span><strong>${draft.durationHours} horas</strong></div><div class="review-description"><span>Descrição</span><p>${escapeHtml(draft.description)}</p></div></section><div class="legal-banner"><strong>Fase de testes:</strong> o pedido será visível para outras contas e receberá apenas contribuições simuladas. Não há garantia de atingir a meta.</div><p id="request-feedback" class="notice hidden" role="status"></p><form id="request-final-form"><label class="check-row"><input id="req-confirm" type="checkbox" required><span>Confirmo que as informações são verdadeiras e entendo que pedidos suspeitos poderão ser suspensos.</span></label><div class="two-actions"><button type="button" class="btn btn-secondary" data-request-step="2">Voltar</button><button type="submit" class="btn btn-primary">Publicar pedido</button></div></form></div>`;
+    }
+  }
+
+  function renderHistory() {
+    $('#page-title').textContent = 'Histórico';
+    const totals = summary();
+    const userId = state.session.user.id;
+    const givenIds = new Set(totals.given.map(item => item.id));
+    const items = [
+      ...totals.own.map(request => ({ kind: 'request', time: request.created_at, request })),
+      ...state.data.contributions.filter(item => item.status === 'simulated_confirmed').map(contribution => ({ kind: givenIds.has(contribution.id) ? 'helped' : 'received', time: contribution.created_at, contribution }))
+    ].filter(item => state.historyTab === 'all' || item.kind === state.historyTab).sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+    app.innerHTML = `<div class="content"><div class="stats"><div class="stat"><strong>${totals.helped}</strong><span>pessoas ajudadas</span></div><div class="stat stat-money"><strong>${brl(totals.contributed).replace(/\s/, ' ')}</strong><span>contribuído em simulações</span></div><div class="stat"><strong>${totals.received.length}</strong><span>apoios simulados recebidos</span></div></div><div class="segmented">${[['all', 'Todos'], ['helped', 'Ajudei'], ['received', 'Recebi']].map(([key, title]) => `<button type="button" class="${state.historyTab === key ? 'active' : ''}" data-history-tab="${key}">${title}</button>`).join('')}</div><div class="section-head history-head"><div><h2>Movimentações</h2><p class="tiny muted">Registros sincronizados da sua participação. Sem movimentação de dinheiro.</p></div></div>${items.length ? `<div class="history-list">${items.map(item => {
+      if (item.kind === 'request') {
+        const request = item.request;
+        return `<div class="history-item history-published"><div class="history-icon">○</div><div class="history-main"><div class="history-title-row"><strong>Pedido publicado</strong><span class="history-badge">Pedido</span></div><div class="tiny muted">${escapeHtml(request.category)} · ${fullDate(item.time)}</div><button type="button" class="link-btn history-detail-link" data-details="${request.id}">Ver pedido</button></div><strong class="history-value status-value">${escapeHtml(statusLabel(request))}</strong></div>`;
+      }
+      const contribution = item.contribution;
+      const request = requestById(contribution.request_id);
+      const helped = contribution.contributor_user_id === userId;
+      const name = helped ? request ? personName(request.user_id) : 'Pedido apoiado' : personName(contribution.contributor_user_id);
+      return `<div class="history-item ${helped ? 'history-helped' : 'history-received'}"><div class="history-icon">${helped ? '♡' : '↓'}</div><div class="history-main"><div class="history-title-row"><strong>${helped ? 'Você ajudou' : 'Você recebeu apoio'}</strong><span class="history-badge">${helped ? 'Ajudei' : 'Recebi'}</span></div><div class="tiny muted">${escapeHtml(name)} · ${fullDate(item.time)}</div>${helped ? `<div class="tiny muted">Taxa simulada: ${brl(contribution.platform_fee_cents)}</div>` : ''}${request ? `<button type="button" class="link-btn history-detail-link" data-details="${request.id}">Ver pedido</button>` : ''}</div><strong class="history-value">${brl(contribution.amount_cents)}</strong></div>`;
+    }).join('')}</div>` : '<section class="empty-state small"><div class="empty-icon">◷</div><h2>Nenhuma movimentação</h2><p>Não há registros para este filtro.</p></section>'}</div>`;
+  }
+
+  function renderProfile() {
+    $('#page-title').textContent = 'Perfil';
+    const user = currentUser();
+    const totals = summary();
+    const levelIndex = state.data.levels.findIndex(level => level.code === user.level);
+    const current = state.data.levels[levelIndex];
+    const next = state.data.levels[levelIndex + 1];
+    const pct = user.period_limit_cents ? Math.min(100, totals.receivedMonth / user.period_limit_cents * 100) : 0;
+    const nextRequest = totals.activeOwn ? 'Pedido em arrecadação' : totals.nextRequestAt > Date.now() ? fullDate(totals.nextRequestAt) : 'Disponível agora';
+    app.innerHTML = `<div class="content">
+      <section class="card profile-hero"><div class="profile-avatar">${escapeHtml(firstName(user.full_name)[0])}</div><h2>${escapeHtml(user.full_name)}</h2><p class="success">${state.session.user.email_confirmed_at ? '✓ E-mail confirmado' : 'Confirmação de e-mail pendente'}</p><p class="muted">Membro desde ${escapeHtml(joinedDate(user.created_at))}</p>${user.account_status !== 'active' ? '<div class="notice">Sua conta não está liberada para novos pedidos ou contribuições.</div>' : ''}</section>
+      <div class="stats"><div class="stat"><strong>${totals.helped}</strong><span>pessoas ajudadas</span></div><div class="stat"><strong>${totals.received.length}</strong><span>apoios recebidos</span></div><div class="stat stat-money"><strong>${brl(totals.contributed).replace(/\s/, ' ')}</strong><span>contribuído em simulações</span></div></div>
+      <section class="card progression-card"><div class="row between progression-head"><div><span class="tiny muted">Seu nível atual</span><h2>${escapeHtml(current?.display_name || levelName(user.level))}</h2></div><span class="level-chip">${brl(user.request_limit_cents)} por pedido</span></div><p class="muted progression-copy">Seus limites são definidos conforme a análise da conta.</p>${next ? `<div class="next-level"><span>Próximo nível</span><strong>${escapeHtml(next.display_name)}</strong><small>Até ${brl(next.request_limit_cents)} por pedido · ${next.period_limit_cents === null ? 'limite mensal sob análise' : brl(next.period_limit_cents) + ' por mês'}</small></div>` : ''}<p class="legal-note top-mini">A progressão considera identidade, tempo de uso, histórico e segurança. Contribuir não cria obrigação de receber nem garante mudança de nível. Confirmar o e-mail não equivale à verificação de identidade.</p></section>
+      <section class="card"><div class="section-head no-margin"><h2>Seus limites</h2></div><div class="limit-row"><span>Por pedido</span><strong>${brl(user.request_limit_cents)}</strong></div><div class="limit-row"><span>Apoios simulados neste mês</span><strong>${brl(totals.receivedMonth)} / ${user.period_limit_cents === null ? 'Sob análise' : brl(user.period_limit_cents)}</strong></div><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted">${totals.available === null ? 'Limite mensal pendente de análise.' : 'Ainda disponível neste mês: ' + brl(totals.available)}</div><div class="limit-row divider"><span>Próximo pedido</span><strong>${escapeHtml(nextRequest)}</strong></div><p class="legal-note">O período mensal vai do primeiro ao último dia do mês, pelo horário UTC. Os valores desta fase são simulados.</p></section>
+      <section class="card level-map-card"><div class="section-head no-margin"><div><h2>Progressão da Somma</h2><p class="tiny muted">Limites crescem gradualmente conforme a confiança na conta.</p></div></div><div class="level-list">${state.data.levels.map(level => `<div class="level-row ${level.code === user.level ? 'active' : ''}"><div><strong>${escapeHtml(level.display_name)}</strong><span>${level.code === 'special' ? 'Faixa sujeita a análise individual.' : 'Progressão sujeita à análise da conta.'}</span></div><div class="level-values"><strong>${level.code === 'special' ? 'Até ' : ''}${brl(level.request_limit_cents)}</strong><span>${level.period_limit_cents === null ? 'Limite mensal sob análise' : brl(level.period_limit_cents) + '/mês'}</span></div></div>`).join('')}</div></section>
+      <section class="card"><div class="section-head no-margin"><h2>Dados do perfil</h2></div><p id="profile-feedback" class="notice hidden" role="status"></p><form id="profile-form"><label class="field">Nome<input id="profile-name" minlength="2" maxlength="120" value="${escapeHtml(user.full_name)}" required></label><label class="field">E-mail<input value="${escapeHtml(state.session.user.email || '')}" disabled></label><p class="tiny muted">Nos pedidos, o nome público é ${escapeHtml(user.public_name)}</p><button class="btn btn-secondary full" type="submit">Salvar nome</button></form></section>
+      <div class="list"><button type="button" class="list-button" data-view="notifications"><span>Notificações</span><strong>›</strong></button><button type="button" class="list-button" id="logout-btn"><span>Sair da conta neste aparelho</span><strong>›</strong></button></div>
+    </div>`;
+  }
+
+  function renderDetail() {
+    $('#page-title').textContent = 'Pedido';
+    const request = requestById(state.detailId);
+    if (!request) {
+      app.innerHTML = '<div class="content"><button type="button" class="back-link" data-back>‹ Voltar</button><section class="empty-state"><h2>Pedido indisponível</h2><p>Este pedido não está disponível para esta conta.</p><button class="btn btn-secondary" type="button" id="detail-refresh">Atualizar</button></section></div>';
+      return;
+    }
+    const remaining = remainingFor(request);
+    const own = request.user_id === state.session.user.id;
+    const available = effectiveStatus(request) === 'active' && remaining > 0;
+    const name = personName(request.user_id);
+    const pct = Math.min(100, request.raised_cents / request.goal_cents * 100);
+    app.innerHTML = `<div class="content"><button type="button" class="back-link" data-back>‹ Voltar</button><section class="card detail-page"><div class="row between card-heading"><div class="row"><div class="avatar large">${escapeHtml(name[0] || 'S')}</div><div><h2>${escapeHtml(name)}</h2><div class="tiny muted">${escapeHtml(remainingTime(request))}</div></div></div><span class="pill">${escapeHtml(request.category)}</span></div><p class="detail-description">${escapeHtml(request.description)}</p><div class="progress"><div style="width:${pct}%"></div></div><div class="money-row"><strong>${brl(request.raised_cents)} simulados</strong><span class="muted">Meta ${brl(request.goal_cents)}</span></div><div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${request.helper_count}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${fullDate(request.created_at)}</strong></div><div><span>Status</span><strong>${escapeHtml(statusLabel(request))}</strong></div></div><div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro. Nesta fase, todos os valores são simulados.</div><button type="button" class="btn btn-primary full" data-contribute="${request.id}" ${own || !available ? 'disabled' : ''}>${own ? 'Este é o seu pedido' : available ? 'Ajudar este pedido' : escapeHtml(statusLabel(request))}</button></section></div>`;
+  }
+
+  function renderNotifications() {
+    $('#page-title').textContent = 'Notificações';
+    const unread = state.data.notifications.filter(item => !item.read_at).length;
+    app.innerHTML = `<div class="content"><button type="button" class="back-link" data-back>‹ Voltar</button><div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div><div class="notification-list">${state.data.notifications.length ? state.data.notifications.map(item => `<div class="notification-item ${item.read_at ? '' : 'unread'}"><span class="notification-dot" aria-hidden="true"></span><div class="notification-copy"><div class="notification-title-row"><strong>${escapeHtml(item.title)}</strong>${item.read_at ? '' : '<span class="new-label">Nova</span>'}</div><p>${escapeHtml(item.body)}</p><span class="tiny muted">${fullDate(item.created_at)}</span></div></div>`).join('') : '<section class="empty-state small"><div class="empty-icon">◌</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div><button type="button" id="mark-read" class="btn btn-secondary full top-gap" ${unread ? '' : 'disabled'}>Marcar todas como lidas</button></div>`;
+  }
+
+  function render() {
+    if (!state.data || !hasSession()) return;
+    const views = { home: renderHome, help: renderHelp, request: renderRequest, history: renderHistory, profile: renderProfile, detail: renderDetail, notifications: renderNotifications };
+    (views[state.view] || renderHome)();
+    document.querySelectorAll('.nav-item').forEach(button => {
+      button.classList.toggle('active', button.dataset.view === state.view);
+      if (button.dataset.view === state.view) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    const unread = state.data.notifications.filter(item => !item.read_at).length;
+    $('#notify-badge').textContent = unread > 99 ? '99+' : String(unread);
+    $('#notify-badge').classList.toggle('hidden', !unread);
+    updatePending();
+    updateSync();
+  }
+
+  function closeDialogOnly() {
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
+    dialog.classList.remove('dialog-fallback-open');
+    $('#app-shell').inert = false;
+  }
+
+  function openContribution(id) {
+    if (!UUID.test(id)) return;
+    if (state.contributionIntent) id = state.contributionIntent.requestId;
+    const request = requestById(id);
+    if (!request) { toast('Atualize para conferir este pedido.'); return; }
+    if (request.user_id === state.session.user.id) { toast('Você não pode contribuir para seu próprio pedido.'); return; }
+    if (currentUser().account_status !== 'active') { toast('Sua conta não está liberada para contribuir.'); return; }
+    if (effectiveStatus(request) !== 'active' && !state.contributionIntent) { toast('Este pedido já não está em arrecadação.'); return; }
+    navigate(state.view, state.detailId, false, id);
+  }
+
+  function setupContribution(id) {
+    const request = requestById(id);
+    if (!request || request.user_id === state.session.user.id) { state.modalRequestId = null; closeDialogOnly(); return; }
+    const pending = state.contributionIntent?.requestId === id ? state.contributionIntent : null;
+    state.modalRequestId = id;
+    state.selectedCents = pending ? pending.amountCents : 0;
+    $('#dialog-person').textContent = `Ajudar ${personName(request.user_id)}`;
+    const remaining = remainingFor(request);
+    $('#amount-options').innerHTML = [100, 200, 500, 1000].filter(value => value <= remaining).map(value => `<button type="button" class="amount-btn ${value === state.selectedCents ? 'selected' : ''}" data-amount="${value}" ${pending ? 'disabled' : ''}>${brl(value)}</button>`).join('');
+    $('#custom-amount').max = String(Math.max(remaining, pending?.amountCents || 0) / 100);
+    $('#custom-amount').value = pending ? String(pending.amountCents / 100) : '';
+    $('#custom-amount').disabled = Boolean(pending);
+    feedback('#contribution-feedback', pending ? 'Esta simulação aguarda confirmação. Confira novamente para consultar ou concluir o mesmo registro, sem duplicá-lo.' : '');
+    updateContributionSummary();
+    if (typeof dialog.showModal === 'function') { if (!dialog.open) dialog.showModal(); }
+    else { dialog.setAttribute('open', ''); dialog.classList.add('dialog-fallback-open'); $('#app-shell').inert = true; }
+  }
+
+  function updateContributionSummary() {
+    const value = state.selectedCents || 0;
+    $('#summary-contribution').textContent = brl(value);
+    $('#summary-fee').textContent = brl(feeFor(value));
+    $('#summary-total').textContent = brl(value + feeFor(value));
+    const request = requestById(state.modalRequestId);
+    const pending = Boolean(state.contributionIntent);
+    const valid = pending || request && effectiveStatus(request) === 'active' && value > 0 && value <= remainingFor(request);
+    $('#confirm-contribution').disabled = !valid || state.contributing || !navigator.onLine;
+    $('#confirm-contribution').textContent = state.contributing ? 'Conferindo…' : pending ? 'Conferir esta simulação' : 'Confirmar simulação';
+  }
+
+  function formBusy(form, busy) {
+    form.setAttribute('aria-busy', String(busy));
+    if (busy) {
+      form._disabled = [...form.elements].map(element => [element, element.disabled]);
+      form._disabled.forEach(([element]) => { element.disabled = true; });
+    } else {
+      form._disabled?.forEach(([element, wasDisabled]) => { element.disabled = wasDisabled; });
+      form._disabled = null;
+    }
+  }
+
+  async function withForm(form, selector, action) {
+    if (form.getAttribute('aria-busy') === 'true') return;
+    feedback(selector, '');
+    formBusy(form, true);
+    try { await action(); }
+    catch (error) { feedback(selector, errorMessage(error)); }
+    finally { formBusy(form, false); }
+  }
+
+  async function logout() {
+    if (!backend?.client) { clearAccount(); return; }
+    try {
+      const { error } = await backend.client.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+      clearAccount();
+      toast('Você saiu da conta neste aparelho.');
+    } catch (error) { toast(errorMessage(error)); }
+  }
+
+  async function submitAuth(form) {
+    await withForm(form, '#auth-feedback', async () => {
+      const auth = backend.client.auth;
+      if (form.id === 'login-form') {
+        const { data, error } = await auth.signInWithPassword({ email: $('#login-email').value.trim().toLowerCase(), password: $('#login-password').value });
+        $('#login-password').value = '';
+        if (error) throw error;
+        await receiveSession(data.session);
+      } else if (form.id === 'signup-form') {
+        const name = $('#signup-name').value.trim();
+        if (name.length < 2) throw { code: 'invalid_full_name' };
+        const email = $('#signup-email').value.trim().toLowerCase();
+        const { data, error } = await auth.signUp({ email, password: $('#signup-password').value, options: { data: { full_name: name }, emailRedirectTo: config.siteUrl } });
+        $('#signup-password').value = '';
+        if (error) throw error;
+        state.confirmEmail = email;
+        if (data.session) await receiveSession(data.session);
+        else {
+          feedback('#auth-feedback', 'Confira seu e-mail para confirmar o cadastro. Depois, entre com seu e-mail e sua senha. Verifique também a caixa de spam.', true);
+          $('#login-email').value = email;
+          $('#resend-confirmation').classList.remove('hidden');
+        }
+      } else if (form.id === 'forgot-form') {
+        const { error } = await auth.resetPasswordForEmail($('#forgot-email').value.trim().toLowerCase(), { redirectTo: config.siteUrl });
+        if (error) throw error;
+        feedback('#auth-feedback', 'Se houver uma conta para este e-mail, você receberá um link para definir uma nova senha.', true);
+      } else if (form.id === 'recovery-form') {
+        const password = $('#recovery-password').value;
+        if (password !== $('#recovery-confirm').value) { feedback('#auth-feedback', 'As senhas precisam ser iguais.'); return; }
+        const { error } = await auth.updateUser({ password });
+        $('#recovery-password').value = '';
+        $('#recovery-confirm').value = '';
+        if (error) throw error;
+        state.recovery = false;
+        await loadData({ initial: true });
+        navigate('home', null, true);
+        toast('Sua senha foi atualizada.');
+      }
     });
   }
-  if(data.user&&corrections[data.user.id])data.user.received=Math.max(0,Number(data.user.received||0)-corrections[data.user.id]);
-}
-function loadState(){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY_V35)||localStorage.getItem(LEGACY_STORAGE_KEY_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_STORAGE_KEY_2)||localStorage.getItem(LEGACY_STORAGE_KEY_OLD)||localStorage.getItem(LEGACY_STORAGE_KEY_V2);
-    const saved=raw?JSON.parse(raw):null;
-    if(saved && saved.requests){
-      if(saved.user && saved.user.email==='demo@apoio.local') saved.user.email='demo@somma.local';
-      if(Array.isArray(saved.users)) saved.users.forEach(u=>{if(u.email==='demo@apoio.local') u.email='demo@somma.local';});
-      const merged={...cloneDefault(),...saved,historyTab:'all',requestStep:1,requestDraft:{value:'',category:'',description:'',time:'48 horas'},activeRequest:null,selectedAmount:0};
-      migratePublishedRequests(merged);
-      if(Array.isArray(merged.users))merged.users.forEach(normalizeUserProgression);
-      if(merged.user)normalizeUserProgression(merged.user);
-      return merged;
+
+  async function publishRequest(form) {
+    if (state.publishing) return;
+    await withForm(form, '#request-feedback', async () => {
+      const values = {
+        userId: state.session.user.id, goalCents: parseCents(state.draft.value),
+        category: state.draft.category, description: state.draft.description.trim(), durationHours: state.draft.durationHours
+      };
+      if (!values.goalCents || values.goalCents < 2000 || !CATEGORIES.includes(values.category) || !values.description) throw { code: 'request_below_minimum' };
+      const existingIds = new Set(state.data.requests.map(request => request.id));
+      state.publishing = true;
+      try {
+        let published;
+        try { published = await backend.createRequest(values); }
+        catch (error) {
+          // The unique active-request rule also protects a lost response.
+          // Recover only a newly observed matching row for this submission.
+          await loadData();
+          const created = state.data.requests.find(request => !existingIds.has(request.id) && request.user_id === values.userId && request.goal_cents === values.goalCents && request.category === values.category && request.description === values.description && request.duration_hours === values.durationHours);
+          if (!created) throw error;
+          published = created;
+        }
+        if (state.session?.user.id !== values.userId) return;
+        if (!state.data.requests.some(request => request.id === published.id)) state.data.requests.unshift(published);
+        resetDraft();
+        navigate('home');
+        toast('Pedido publicado. Ele já pode receber contribuições simuladas.');
+        await loadData().catch(() => {});
+      } finally { state.publishing = false; }
+    });
+  }
+
+  async function confirmContribution(form) {
+    if (state.contributing || !hasSession() || !navigator.onLine) return;
+    const request = requestById(state.modalRequestId);
+    if (!request) return;
+    let intent = state.contributionIntent;
+    if (!intent) {
+      const amountCents = state.selectedCents;
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > remainingFor(request)) return;
+      intent = { key: uuid(), userId: state.session.user.id, requestId: request.id, amountCents };
+      saveIntent(intent);
     }
-  }catch(e){}
-  return cloneDefault();
-}
-function saveState(){
-  const safe={...state,activeRequest:null,selectedAmount:0};
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(safe));
-}
-function setSession(email){localStorage.setItem(SESSION_KEY,email||'');}
-function getSession(){return localStorage.getItem(SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY)||localStorage.getItem(LEGACY_SESSION_KEY_V35)||localStorage.getItem(LEGACY_SESSION_KEY_V34)||localStorage.getItem(LEGACY_SESSION_KEY_SOMMA_V34)||localStorage.getItem(LEGACY_SESSION_KEY_2)||localStorage.getItem(LEGACY_SESSION_KEY_OLD)||localStorage.getItem(LEGACY_SESSION_KEY_V2)||'';}
-function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-function toast(message){
-  if(!toastEl)return;
-  toastEl.textContent=message;toastEl.classList.remove('hidden');
-  clearTimeout(toastEl._t);toastEl._t=setTimeout(()=>toastEl.classList.add('hidden'),2800);
-}
-
-function init(){
-  const session=getSession();
-  if(session){
-    const found=state.users.find(u=>u.email===session);
-    if(found)state.user=found;
-    if(session==='demo@somma.local'&&!found)state.user=makeDemoUser();
-  }
-  if(state.user)showApp();else showAuth();
-  updateBadge();
-}
-
-function makeDemoUser(){
-  let demo=state.users.find(u=>u.email==='demo@somma.local');
-  if(!demo){
-    demo={id:'demo-user',name:'Paula',email:'demo@somma.local',password:'demo',verified:true,level:'verified',helped:18,received:2,contributed:74,receivedMonth:50,limitPerRequest:100,monthlyLimit:300,nextRequestDays:3,joined:'Outubro de 2026'};
-    state.users.push(demo);saveState();
-  }
-  return demo;
-}
-function currentUser(){
-  if(!state.user)return null;
-  const stored=state.users.find(u=>u.id===state.user.id);
-  if(stored)state.user=stored;
-  normalizeUserProgression(state.user);
-  return state.user;
-}
-function syncUser(){
-  normalizeUserProgression(state.user);
-  const i=state.users.findIndex(u=>u.id===state.user.id);
-  if(i>=0)state.users[i]=state.user;else state.users.push(state.user);
-  saveState();
-}
-function firstName(name){return String(name||'').trim().split(/\s+/)[0]||'Usuário';}
-function publicName(name){
-  const parts=String(name||'').trim().split(/\s+/).filter(Boolean);
-  if(!parts.length)return 'Usuário';
-  if(parts.length===1)return parts[0];
-  const initial=(parts[1].replace(/[^A-Za-zÀ-ÿ]/g,'').charAt(0)||'').toUpperCase();
-  return initial?`${parts[0]} ${initial}.`:parts[0];
-}
-function userInitial(){return firstName(currentUser()?.name).charAt(0).toUpperCase();}
-function showAuth(){authScreen.classList.remove('hidden');appShell.classList.add('hidden');}
-function showApp(){authScreen.classList.add('hidden');appShell.classList.remove('hidden');render();}
-function logout(){state.user=null;setSession('');localStorage.removeItem(LEGACY_SESSION_KEY);state.view='home';showAuth();}
-function notify(title,text){state.notifications.unshift({id:Date.now(),title,text,time:'Agora',read:false});saveState();updateBadge();}
-
-function requestCard(r){
-  const pct=Math.min(100,(r.raised/r.goal)*100);
-  const remaining=Math.max(0,r.goal-r.raised);
-  const own=r.createdBy===currentUser()?.id;
-  return `<article class="card">
-    <div class="row between">
-      <div class="row"><div class="avatar">${escapeHtml((publicName(r.name)||'U')[0])}</div><div><strong>${escapeHtml(publicName(r.name))}</strong><div class="tiny muted">${r.verified?'✓ Verificado · ':''}${escapeHtml(r.time)}</div></div></div>
-      <div class="row mini-gap">${own?'<span class="pill own-pill">Seu pedido</span>':''}<span class="pill">${escapeHtml(r.category)}</span></div>
-    </div>
-    <p>${escapeHtml(r.description)}</p>
-    <div class="progress" aria-label="${Math.round(pct)}% da meta"><div style="width:${pct}%"></div></div>
-    <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
-    <div class="tiny muted top-mini">${r.helpers} pessoas ajudaram · faltam ${brl(remaining)}</div>
-    <div class="actions"><button type="button" class="btn btn-primary contribute" data-id="${r.id}" onclick="window.Somma.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Seu pedido':remaining<=0?'Meta atingida':'Ajudar agora'}</button><button type="button" class="btn btn-secondary details" data-id="${r.id}" onclick="window.Somma.openDetails(${r.id})">Ver pedido</button></div>
-  </article>`;
-}
-
-function renderHome(){
-  const user=currentUser();pageTitle.textContent='Início';
-  const active=state.requests.filter(r=>r.goal>r.raised);
-  const completed=state.requests.filter(r=>r.raised>=r.goal);
-  const primary=active[0]||state.requests[0];
-  const almost=active.slice().sort((a,b)=>(a.goal-a.raised)-(b.goal-b.raised)).find(r=>r.id!==primary?.id)||active[0];
-  app.innerHTML=`<div class="content">
-    <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(firstName(user.name))}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
-    <div class="stats"><div class="stat"><strong>${active.length}</strong><span>pedidos ativos</span></div><div class="stat"><strong>${completed.length}</strong><span>metas concluídas</span></div><div class="stat"><strong>${brl(1)}</strong><span>para começar</span></div></div>
-    <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
-    <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-go="help" onclick="window.Somma.go('help')">Ver todos</button></div>
-    ${primary?requestCard(primary):''}
-    ${almost?`<div class="section-head"><h2>Quase lá</h2></div>${requestCard(almost)}`:''}
-  </div>`;
-}
-
-function renderHelp(){
-  pageTitle.textContent='Ajudar';
-  const requests=state.requests.filter(r=>r.goal>r.raised);
-  app.innerHTML=`<div class="content"><div class="section-head"><div><h2>Pedidos ativos</h2><p class="muted tiny">Escolha livremente quem você quer apoiar.</p></div></div><div class="legal-banner compact"><strong>Sem obrigação de retorno.</strong> Ajudar hoje não cria direito automático de receber amanhã.</div>${requests.length?requests.map(requestCard).join(''):'<section class="empty-state"><div class="empty-icon">♡</div><h2>Nenhum pedido ativo</h2><p>Novos pedidos aparecerão aqui.</p></section>'}</div>`;
-}
-
-function canCreateRequest(u){return Number(u.nextRequestDays||0)<=0;}
-function renderRequest(){
-  const u=currentUser();pageTitle.textContent='Pedir apoio';
-  if(!canCreateRequest(u)){
-    app.innerHTML=`<div class="content"><section class="empty-state"><div class="empty-icon">⏳</div><h2>Seu próximo pedido ainda não está disponível</h2><p>Para este protótipo, existe um intervalo mínimo entre pedidos.</p><div class="limit-card"><span>Disponível em</span><strong>${u.nextRequestDays} dias</strong></div>${u.email==='demo@somma.local'?'<button class="btn btn-primary full" id="demo-unlock-request">Liberar pedido para testar</button><button class="btn btn-secondary full top-gap" data-go="profile">Ver meus limites</button>':'<button class="btn btn-secondary full" data-go="profile">Ver meus limites</button>'}</section></div>`;return;
-  }
-  const d=state.requestDraft||{value:'',category:'',description:'',time:'48 horas'};
-  const step=state.requestStep||1;
-  const stepLabel=`Etapa ${step} de 3`;
-  if(step===1){
-    app.innerHTML=`<div class="content"><div class="stepper"><span class="active"></span><span></span><span></span></div><p class="eyebrow">${stepLabel}</p><h2 class="flow-title">Defina sua necessidade</h2><div class="request-limit-highlight"><span>Nível ${escapeHtml(levelInfo(u).name)} · limite por pedido</span><strong>${brl(u.limitPerRequest)}</strong><small>Disponível no período: ${brl(Math.max(0,u.monthlyLimit-(u.receivedMonth||0)))}</small></div><div class="notice">Valor mínimo de R$ 20. O pedido também deve respeitar seu limite mensal de ${brl(u.monthlyLimit)}.</div><form class="form-card" id="request-step-1"><label class="field">Quanto você precisa?<input id="req-value" type="number" min="20" max="${u.limitPerRequest}" step="1" inputmode="decimal" value="${escapeHtml(d.value)}" placeholder="Ex.: 50" required></label><label class="field">Categoria<select id="req-category" required><option value="">Selecione</option>${['Combustível','Alimentação','Transporte','Medicamentos','Conta essencial','Emergência','Outro'].map(c=>`<option ${d.category===c?'selected':''}>${c}</option>`).join('')}</select></label><button class="btn btn-primary full">Continuar</button></form></div>`;
-  }else if(step===2){
-    app.innerHTML=`<div class="content"><div class="stepper"><span class="active"></span><span class="active"></span><span></span></div><p class="eyebrow">${stepLabel}</p><h2 class="flow-title">Conte o essencial</h2><form class="form-card" id="request-step-2"><label class="field">Descreva sua necessidade<textarea id="req-description" maxlength="180" placeholder="Explique sua necessidade de forma objetiva." required>${escapeHtml(d.description)}</textarea><span class="tiny muted"><span id="desc-count">${String(d.description||'').length}</span>/180 · Evite dados pessoais, endereço ou documentos.</span></label><label class="field">Prazo<select id="req-time"><option ${d.time==='24 horas'?'selected':''}>24 horas</option><option ${d.time==='48 horas'?'selected':''}>48 horas</option></select></label><div class="two-actions"><button type="button" class="btn btn-secondary" id="request-back-1">Voltar</button><button class="btn btn-primary">Continuar</button></div></form></div>`;
-  }else{
-    app.innerHTML=`<div class="content"><div class="stepper"><span class="active"></span><span class="active"></span><span class="active"></span></div><p class="eyebrow">${stepLabel}</p><h2 class="flow-title">Revise antes de publicar</h2><section class="card review-card"><div class="review-row"><span>Valor</span><strong>${brl(d.value)}</strong></div><div class="review-row"><span>Categoria</span><strong>${escapeHtml(d.category)}</strong></div><div class="review-row"><span>Prazo</span><strong>${escapeHtml(d.time)}</strong></div><div class="review-description"><span>Descrição</span><p>${escapeHtml(d.description)}</p></div></section><div class="legal-banner"><strong>Atenção:</strong> o pedido é uma solicitação de apoio voluntário. Não há garantia de atingir a meta.</div><form id="request-final-form"><label class="check-row"><input id="req-confirm" type="checkbox" required><span>Confirmo que as informações são verdadeiras e entendo que a plataforma poderá suspender pedidos suspeitos.</span></label><div class="two-actions"><button type="button" class="btn btn-secondary" id="request-back-2">Voltar</button><button class="btn btn-primary">Publicar pedido</button></div></form></div>`;
-  }
-}
-
-function renderHistory(){
-  const u=currentUser();pageTitle.textContent='Histórico';
-  const all=state.history.filter(h=>!h.userId||h.userId===u.id);
-  const filter=state.historyTab||'all';
-  const items=all.filter(h=>filter==='all'||(filter==='helped'&&h.type==='Ajudou')||(filter==='received'&&h.type==='Recebeu apoio'));
-  app.innerHTML=`<div class="content"><div class="stats"><div class="stat"><strong>${u.helped}</strong><span>pessoas ajudadas</span></div><div class="stat"><strong>${brl(u.contributed)}</strong><span>contribuído</span></div><div class="stat"><strong>${u.received}</strong><span>apoios recebidos</span></div></div><div class="segmented"><button class="${filter==='all'?'active':''}" data-history-tab="all">Todos</button><button class="${filter==='helped'?'active':''}" data-history-tab="helped">Ajudei</button><button class="${filter==='received'?'active':''}" data-history-tab="received">Recebi</button></div><div class="section-head history-head"><div><h2>Movimentações</h2><p class="tiny muted">Seu histórico de participação na Somma.</p></div></div>${items.length?`<div class="history-list">${items.map(h=>{
-    const helped=h.type==='Ajudou',received=h.type==='Recebeu apoio',published=h.type==='Pedido publicado';
-    const amount=Number(h.value||0);
-    const title=helped?'Você ajudou':received?'Você recebeu apoio':'Pedido em arrecadação';
-    const badge=helped?'Ajudei':received?'Recebi':'Pedido';
-    const icon=helped?'♡':received?'↓':'○';
-    const value=published?'Em arrecadação':brl(amount);
-    const person=helped?publicName(h.person):h.person;
-    return `<div class="history-item ${helped?'history-helped':received?'history-received':'history-published'}"><div class="history-icon">${icon}</div><div class="history-main"><div class="history-title-row"><strong>${title}</strong><span class="history-badge">${badge}</span></div><div class="tiny muted">${escapeHtml(person)} · ${escapeHtml(h.date)}</div></div><strong class="history-value ${published?'status-value':''}">${value}</strong></div>`
-  }).join('')}</div>`:`<section class="empty-state small"><div class="empty-icon">◷</div><h2>Nenhuma movimentação</h2><p>Não há registros para este filtro.</p></section>`}</div>`;
-}
-
-function renderProfile(){
-  const u=currentUser();pageTitle.textContent='Perfil';
-  const available=Math.max(0,u.monthlyLimit-(u.receivedMonth||0));
-  const pct=Math.min(100,((u.receivedMonth||0)/u.monthlyLimit)*100);
-  const current=levelInfo(u),next=nextLevelInfo(u);
-  const levelsHtml=LEVEL_ORDER.map(key=>{
-    const l=LEVELS[key],active=l.key===current.key;
-    const monthly=l.monthlyLimit==null?'Sob análise':brl(l.monthlyLimit);
-    return `<div class="level-row ${active?'active':''}"><div><strong>${escapeHtml(l.name)}</strong><span>${escapeHtml(l.description)}</span></div><div class="level-values"><strong>${l.key==='special'?'Até '+brl(l.limitPerRequest):brl(l.limitPerRequest)}</strong><span>${monthly}/mês</span></div></div>`;
-  }).join('');
-  app.innerHTML=`<div class="content">
-    <section class="card profile-hero"><div class="profile-avatar">${userInitial()}</div><h2>${escapeHtml(u.name)}</h2><p class="success">${u.verified?'✓ Identidade verificada':'○ Verificação pendente'}</p><p class="muted">Membro desde ${escapeHtml(u.joined||'2026')}</p></section>
-    <div class="stats"><div class="stat"><strong>${u.helped}</strong><span>ajudou</span></div><div class="stat"><strong>${u.received}</strong><span>recebeu</span></div><div class="stat"><strong>${brl(u.contributed)}</strong><span>contribuiu</span></div></div>
-    <section class="card progression-card"><div class="row between progression-head"><div><span class="tiny muted">Seu nível atual</span><h2>${escapeHtml(current.name)}</h2></div><span class="level-chip">${brl(current.limitPerRequest)} por pedido</span></div><p class="muted progression-copy">${escapeHtml(current.description)}</p>${next?`<div class="next-level"><span>Próximo nível</span><strong>${escapeHtml(next.name)}</strong><small>${next.key==='special'?'Até '+brl(next.limitPerRequest)+' por pedido · análise individual':brl(next.limitPerRequest)+' por pedido · '+brl(next.monthlyLimit)+' por mês'}</small></div>`:''}<p class="legal-note top-mini">A progressão considera identidade, tempo de uso, histórico, segurança e comportamento na comunidade. Contribuir não cria obrigação de receber nem garante mudança de nível.</p></section>
-    <section class="card"><div class="section-head no-margin"><h2>Seus limites</h2></div><div class="limit-row"><span>Por pedido</span><strong>${brl(u.limitPerRequest)}</strong></div><div class="limit-row"><span>Recebido neste período</span><strong>${brl(u.receivedMonth||0)} / ${brl(u.monthlyLimit)}</strong></div><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted">Ainda disponível no período: ${brl(available)}</div><div class="limit-row divider"><span>Próximo pedido</span><strong>${u.nextRequestDays>0?`Em ${u.nextRequestDays} dias`:'Disponível agora'}</strong></div></section>
-    <section class="card level-map-card"><div class="section-head no-margin"><div><h2>Progressão da Somma</h2><p class="tiny muted">Limites crescem gradualmente conforme a confiança na conta.</p></div></div><div class="level-list">${levelsHtml}</div></section>
-    <section class="card"><div class="section-head no-margin"><h2>Dados do perfil</h2></div><form id="profile-form"><label class="field">Nome<input id="profile-name" maxlength="40" value="${escapeHtml(u.name)}" required></label><label class="field">E-mail<input value="${escapeHtml(u.email)}" disabled></label><button class="btn btn-secondary full">Salvar nome</button></form></section>
-    <div class="list"><button class="list-button" id="profile-notifications" onclick="window.Somma.openNotifications()"><span>Notificações</span><strong>›</strong></button><button class="list-button" id="logout-btn"><span>Sair do protótipo</span><strong>›</strong></button><button class="list-button danger" id="reset-btn"><span>Apagar dados locais do MVP</span><strong>›</strong></button></div>
-  </div>`;
-}
-
-function renderDetailPage(){
-  const r=state.requests.find(x=>x.id===Number(state.detailRequestId));
-  if(!r){state.view='home';renderHome();return;}
-  pageTitle.textContent='Pedido';
-  const remaining=Math.max(0,r.goal-r.raised),pct=Math.min(100,(r.raised/r.goal)*100),own=r.createdBy===currentUser()?.id;
-  app.innerHTML=`<div class="content">
-    <button type="button" class="back-link" onclick="window.Somma.back()">‹ Voltar</button>
-    <section class="card detail-page">
-      <div class="row between"><div class="row"><div class="avatar large">${escapeHtml((publicName(r.name)||'U')[0])}</div><div><h2>${escapeHtml(publicName(r.name))}</h2><div class="tiny muted">${r.verified?'✓ Identidade verificada · ':''}${escapeHtml(r.time)}</div></div></div><span class="pill">${escapeHtml(r.category)}</span></div>
-      <p class="detail-description">${escapeHtml(r.description)}</p>
-      <div class="progress"><div style="width:${pct}%"></div></div>
-      <div class="money-row"><strong>${brl(r.raised)} arrecadados</strong><span class="muted">Meta ${brl(r.goal)}</span></div>
-      <div class="detail-grid"><div><span>Pessoas que ajudaram</span><strong>${r.helpers}</strong></div><div><span>Falta</span><strong>${brl(remaining)}</strong></div><div><span>Criado</span><strong>${escapeHtml(r.createdAt||'Hoje')}</strong></div><div><span>Status</span><strong>${remaining<=0?'Concluído':'Ativo'}</strong></div></div>
-      <div class="legal-banner compact"><strong>Contribuição voluntária:</strong> não há obrigação de restituição, juros ou retorno financeiro.</div>
-      <button type="button" class="btn btn-primary full" onclick="window.Somma.openContribution(${r.id})" ${remaining<=0||own?'disabled':''}>${own?'Este é o seu pedido':remaining<=0?'Meta atingida':'Ajudar este pedido'}</button>
-    </section>
-  </div>`;
-}
-
-function renderNotificationsPage(){
-  pageTitle.textContent='Notificações';
-  app.innerHTML=`<div class="content">
-    <button type="button" class="back-link" onclick="window.Somma.back()">‹ Voltar</button>
-    <div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div>
-    <div class="notification-list" id="notifications-page-list">${state.notifications.length?state.notifications.map(n=>`<div class="notification-item ${n.read?'':'unread'}"><span class="notification-dot" aria-hidden="true"></span><div class="notification-copy"><div class="notification-title-row"><strong>${escapeHtml(n.title)}</strong>${n.read?'':'<span class="new-label">Nova</span>'}</div><p>${escapeHtml(n.text)}</p><span class="tiny muted">${escapeHtml(n.time)}</span></div></div>`).join(''):'<section class="empty-state small"><div class="empty-icon bell-icon">◌</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div>
-    <button type="button" id="mark-read-page" class="btn btn-secondary full top-gap">Marcar todas como lidas</button>
-  </div>`;
-}
-
-function render(){
-  if(!state.user)return;
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));
-  const views={home:renderHome,help:renderHelp,request:renderRequest,history:renderHistory,profile:renderProfile,detail:renderDetailPage,notifications:renderNotificationsPage};
-  (views[state.view]||renderHome)();updateBadge();
-}
-
-function openContribution(id){
-  const r=state.requests.find(x=>x.id===id);if(!r)return;
-  if(r.createdBy===currentUser()?.id){toast('Você não pode contribuir para o próprio pedido.');return;}
-  state.activeRequest=r;state.selectedAmount=0;
-  document.querySelector('#dialog-person').textContent=`Ajudar ${publicName(r.name)}`;
-  const remaining=Math.max(0,r.goal-r.raised);
-  const opts=[1,2,5,10].filter(v=>v<=remaining);
-  document.querySelector('#amount-options').innerHTML=opts.length?opts.map(v=>`<button type="button" class="amount-btn" data-amount="${v}">${brl(v)}</button>`).join(''):'<p class="muted tiny">A meta já foi atingida.</p>';
-  const custom=document.querySelector('#custom-amount');custom.max=remaining;custom.value='';custom.disabled=remaining<=0;
-  updateContributionSummary();dlg.showModal();
-}
-function updateContributionSummary(){
-  const v=Number(state.selectedAmount)||0,fee=v?feeFor(v):0;
-  document.querySelector('#summary-contribution').textContent=brl(v);
-  document.querySelector('#summary-fee').textContent=brl(fee);
-  document.querySelector('#summary-total').textContent=brl(v+fee);
-  document.querySelector('#confirm-contribution').disabled=v<=0;
-}
-function safeShowDialog(el){
-  if(!el)return false;
-  try{
-    if(typeof el.showModal==='function'){
-      if(!el.open)el.showModal();
-    }else{
-      el.setAttribute('open','');
-      el.classList.add('dialog-fallback-open');
+    state.contributing = true;
+    formBusy(form, true);
+    feedback('#contribution-feedback', 'Conferindo o registro da simulação…');
+    updateContributionSummary();
+    try {
+      const result = await backend.contribute(intent);
+      if (state.session?.user.id !== intent.userId) return;
+      saveIntent(null);
+      state.contributing = false;
+      closeDialogOnly();
+      state.modalRequestId = null;
+      if (state.routeDepth > 0) history.back();
+      else navigate('detail', intent.requestId, true);
+      toast(`Simulação de ${brl(result.amount_cents)} registrada. Nenhum valor foi cobrado.`);
+      await loadData().catch(() => {});
+    } catch (error) {
+      if (error.outcomeKnown) {
+        saveIntent(null);
+        feedback('#contribution-feedback', errorMessage(error));
+        loadData().catch(() => {});
+      } else {
+        // Keep this intent and amount unchanged after an uncertain response.
+        feedback('#contribution-feedback', `${errorMessage(error)} Use “Conferir esta simulação” para consultar o mesmo registro.`);
+      }
+    } finally {
+      state.contributing = false;
+      formBusy(form, false);
+      if (state.contributionIntent) {
+        $('#custom-amount').disabled = true;
+        document.querySelectorAll('.amount-btn').forEach(button => { button.disabled = true; });
+      } else {
+        $('#custom-amount').disabled = false;
+        document.querySelectorAll('.amount-btn').forEach(button => { button.disabled = false; });
+      }
+      updateContributionSummary();
     }
-    return true;
-  }catch(err){
-    console.error(err);
-    try{el.setAttribute('open','');el.classList.add('dialog-fallback-open');return true;}catch(e){return false;}
   }
-}
-function safeCloseDialog(el){
-  if(!el)return;
-  try{if(typeof el.close==='function'&&el.open)el.close();else el.removeAttribute('open');}catch(e){el.removeAttribute('open');}
-  el.classList.remove('dialog-fallback-open');
-}
-function openDetails(id){
-  const r=state.requests.find(x=>x.id===Number(id));if(!r){toast('Pedido não encontrado.');return;}
-  state.returnView=(state.view==='detail'||state.view==='notifications')?'home':state.view;
-  state.detailRequestId=Number(id);state.view='detail';saveState();render();window.scrollTo({top:0,behavior:'auto'});
-}
-function openNotifications(){
-  state.returnView=(state.view==='detail'||state.view==='notifications')?'home':state.view;
-  state.view='notifications';saveState();render();window.scrollTo({top:0,behavior:'auto'});
-}
-function updateBadge(){
-  const unread=state.notifications.filter(n=>!n.read).length,b=document.querySelector('#notify-badge');
-  if(!b)return;b.textContent=unread;b.classList.toggle('hidden',unread===0);
-}
-function resetRequestFlow(){state.requestStep=1;state.requestDraft={value:'',category:'',description:'',time:'48 horas'};}
 
-// API direta para cliques em iPhone/Safari.
-window.Somma={
-  go(view){
-    state.view=view;
-    if(view!=='request')resetRequestFlow();
-    saveState();
-    render();
-    window.scrollTo({top:0,behavior:'auto'});
-  },
-  openDetails(id){openDetails(Number(id));},
-  openNotifications(){openNotifications();},
-  openContribution(id){openContribution(Number(id));},
-  back(){state.view=state.returnView||'home';saveState();render();window.scrollTo({top:0,behavior:'auto'});},
-  closeDialog(id){safeCloseDialog(document.getElementById(id));}
-};
+  document.addEventListener('submit', event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    event.preventDefault();
+    if (!navigator.onLine) { feedback(form.closest('#auth-screen') ? '#auth-feedback' : form.id === 'contribute-form' ? '#contribution-feedback' : '#request-feedback', 'Você está sem conexão. Conecte-se à internet para continuar.'); return; }
+    if (['login-form', 'signup-form', 'forgot-form', 'recovery-form'].includes(form.id)) { submitAuth(form).catch(() => {}); return; }
+    if (!state.data || !hasSession()) return;
+    if (form.id === 'request-step-1') {
+      const cents = parseCents($('#req-value').value);
+      const totals = summary();
+      if (cents === null || cents < 2000 || cents > currentUser().request_limit_cents || cents > totals.available) { feedback('#request-feedback', 'Confira o valor mínimo de R$ 20,00 e os limites disponíveis.'); return; }
+      state.draft.value = $('#req-value').value;
+      state.draft.category = $('#req-category').value;
+      state.requestStep = 2;
+      renderRequest();
+    } else if (form.id === 'request-step-2') {
+      const description = $('#req-description').value.trim();
+      if (!description) { feedback('#request-feedback', 'Descreva sua necessidade.'); return; }
+      state.draft.description = description;
+      state.draft.durationHours = Number($('#req-time').value);
+      state.requestStep = 3;
+      renderRequest();
+    } else if (form.id === 'request-final-form') publishRequest(form).catch(() => {});
+    else if (form.id === 'contribute-form') confirmContribution(form).catch(() => {});
+    else if (form.id === 'profile-form') withForm(form, '#profile-feedback', async () => {
+      const name = $('#profile-name').value.trim();
+      if (name.length < 2 || name.length > 120) throw { code: 'invalid_full_name' };
+      const userId = state.session.user.id;
+      const updated = await backend.saveName(userId, name);
+      if (state.session?.user.id !== userId || !state.data) return;
+      state.data.profile = updated;
+      state.publicProfiles.set(updated.id, { id: updated.id, public_name: updated.public_name, level: updated.level });
+      renderProfile();
+      toast('Seu nome foi atualizado.');
+    }).catch(() => {});
+  });
 
-// Authentication tabs and general clicks
-document.addEventListener('click',e=>{
-  const tab=e.target.closest('[data-auth-tab]');
-  if(tab){document.querySelectorAll('.auth-tab').forEach(x=>x.classList.toggle('active',x===tab));document.querySelector('#login-form').classList.toggle('hidden',tab.dataset.authTab!=='login');document.querySelector('#signup-form').classList.toggle('hidden',tab.dataset.authTab!=='signup');return;}
-  const nav=e.target.closest('[data-view]');if(nav){state.view=nav.dataset.view;if(state.view!=='request')resetRequestFlow();saveState();render();return;}
-  const go=e.target.closest('[data-go]');if(go){state.view=go.dataset.go;saveState();render();return;}
-  const hist=e.target.closest('[data-history-tab]');if(hist){state.historyTab=hist.dataset.historyTab;renderHistory();return;}
-  const c=e.target.closest('.contribute');if(c){if(detailsDlg?.open)safeCloseDialog(detailsDlg);openContribution(Number(c.dataset.id));return;}
-  const d=e.target.closest('.details');if(d){openDetails(Number(d.dataset.id));return;}
-  const a=e.target.closest('.amount-btn');if(a){state.selectedAmount=Number(a.dataset.amount);document.querySelectorAll('.amount-btn').forEach(b=>b.classList.toggle('selected',b===a));document.querySelector('#custom-amount').value='';updateContributionSummary();return;}
-  const close=e.target.closest('.close-dialog');if(close){safeCloseDialog(document.querySelector('#'+close.dataset.dialog));return;}
-  if(e.target.closest('#notify-btn')||e.target.closest('#profile-notifications')){openNotifications();return;}
-  if(e.target.closest('#mark-read')||e.target.closest('#mark-read-page')){state.notifications.forEach(n=>n.read=true);saveState();updateBadge();if(state.view==='notifications')renderNotificationsPage();return;}
-  if(e.target.closest('#logout-btn')){logout();return;}
-  if(e.target.closest('#reset-btn')){if(confirm('Apagar todos os dados locais deste protótipo neste aparelho?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY);localStorage.removeItem(LEGACY_STORAGE_KEY_V35);localStorage.removeItem(LEGACY_STORAGE_KEY_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_STORAGE_KEY_OLD);localStorage.removeItem(LEGACY_STORAGE_KEY_V2);localStorage.removeItem(SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY);localStorage.removeItem(LEGACY_SESSION_KEY_V35);localStorage.removeItem(LEGACY_SESSION_KEY_V34);localStorage.removeItem(LEGACY_SESSION_KEY_SOMMA_V34);localStorage.removeItem(LEGACY_SESSION_KEY_OLD);localStorage.removeItem(LEGACY_SESSION_KEY_V2);state=cloneDefault();showAuth();}return;}
-  if(e.target.closest('#demo-access')){state.user=makeDemoUser();setSession(state.user.email);state.history=state.history.length?state.history:[{type:'Ajudou',person:'Camila R.',value:5,date:'Hoje',userId:state.user.id},{type:'Recebeu apoio',person:'Comunidade',value:50,date:'12/10/2026',userId:state.user.id},{type:'Ajudou',person:'João P.',value:2,date:'10/10/2026',userId:state.user.id}];saveState();showApp();return;}
-  if(e.target.closest('#request-back-1')){state.requestStep=1;renderRequest();return;}
-  if(e.target.closest('#request-back-2')){state.requestStep=2;renderRequest();return;}
-  if(e.target.closest('#demo-unlock-request')){const u=currentUser();u.nextRequestDays=0;syncUser();toast('Pedido liberado para teste.');renderRequest();return;}
-});
+  document.addEventListener('click', event => {
+    const target = event.target instanceof Element ? event.target : event.target.parentElement;
+    const button = target?.closest('button');
+    if (!button || button.disabled) return;
+    if (button.dataset.authTab) { authMode(button.dataset.authTab); return; }
+    if (button.id === 'boot-retry') { if (!backend?.client) location.reload(); else if (hasSession()) loadData({ initial: true }).catch(() => {}); else bootstrap(); return; }
+    if (button.id === 'boot-logout' || button.id === 'logout-btn' || button.id === 'cancel-recovery') { logout(); return; }
+    if (button.id === 'resend-confirmation') {
+      button.disabled = true;
+      backend.client.auth.resend({ type: 'signup', email: state.confirmEmail, options: { emailRedirectTo: config.siteUrl } }).then(({ error }) => {
+        feedback('#auth-feedback', error ? errorMessage(error) : 'E-mail de confirmação reenviado. Confira sua caixa de entrada e o spam.', !error);
+      }).catch(error => feedback('#auth-feedback', errorMessage(error))).finally(() => { button.disabled = false; });
+      return;
+    }
+    if (!state.data || !hasSession()) return;
+    if (button.dataset.view) { navigate(button.dataset.view); return; }
+    if (button.dataset.details) { navigate('detail', button.dataset.details); return; }
+    if (button.dataset.contribute) { openContribution(button.dataset.contribute); return; }
+    if (button.hasAttribute('data-back') || button.id === 'close-contribution') { back(); return; }
+    if (button.id === 'notify-btn') { navigate('notifications'); return; }
+    if (button.id === 'resume-contribution' && state.contributionIntent) { openContribution(state.contributionIntent.requestId); return; }
+    if (button.id === 'refresh-data' || button.id === 'detail-refresh') { loadData().catch(() => {}); return; }
+    if (button.dataset.historyTab) { state.historyTab = button.dataset.historyTab; renderHistory(); return; }
+    if (button.dataset.requestStep) { state.requestStep = Number(button.dataset.requestStep); renderRequest(); return; }
+    if (button.dataset.amount && !state.contributionIntent) {
+      state.selectedCents = Number(button.dataset.amount);
+      document.querySelectorAll('.amount-btn').forEach(item => item.classList.toggle('selected', item === button));
+      $('#custom-amount').value = '';
+      updateContributionSummary();
+      return;
+    }
+    if (button.id === 'mark-read') {
+      button.disabled = true;
+      const userId = state.session.user.id;
+      backend.markNotificationsRead(userId).then(rows => {
+        if (state.session?.user.id !== userId || !state.data) return;
+        const updated = new Map(rows.map(row => [row.id, row.read_at]));
+        state.data.notifications.forEach(item => { if (updated.has(item.id)) item.read_at = updated.get(item.id); });
+        render();
+        toast('Notificações marcadas como lidas.');
+      }).catch(error => { button.disabled = false; toast(errorMessage(error)); });
+    }
+  });
 
-document.addEventListener('input',e=>{
-  if(e.target.id==='custom-amount'){
-    const max=Number(e.target.max)||999;state.selectedAmount=Math.max(0,Math.min(max,Number(e.target.value)||0));
-    document.querySelectorAll('.amount-btn').forEach(b=>b.classList.remove('selected'));updateContributionSummary();
-  }
-  if(e.target.id==='req-description'){
-    const counter=document.querySelector('#desc-count');if(counter)counter.textContent=e.target.value.length;
-  }
-});
+  document.addEventListener('input', event => {
+    const input = event.target;
+    if (input.id === 'custom-amount' && !state.contributionIntent) {
+      state.selectedCents = parseCents(input.value) || 0;
+      document.querySelectorAll('.amount-btn').forEach(button => button.classList.remove('selected'));
+      updateContributionSummary();
+    }
+    if (input.id === 'req-value') state.draft.value = input.value;
+    if (input.id === 'req-category') state.draft.category = input.value;
+    if (input.id === 'req-description') { state.draft.description = input.value; $('#desc-count').textContent = input.value.length; }
+    if (input.id === 'req-time') state.draft.durationHours = Number(input.value);
+  });
 
-document.addEventListener('submit',e=>{
-  if(e.target.id==='signup-form'){
-    e.preventDefault();
-    const name=document.querySelector('#signup-name').value.trim(),email=document.querySelector('#signup-email').value.trim().toLowerCase(),password=document.querySelector('#signup-password').value;
-    if(state.users.some(u=>u.email===email)){toast('Já existe um cadastro local com este e-mail.');return;}
-    const u={id:'u-'+Date.now(),name,email,password,verified:false,level:'initial',helped:0,received:0,contributed:0,receivedMonth:0,limitPerRequest:50,monthlyLimit:150,nextRequestDays:0,joined:'Outubro de 2026'};
-    state.users.push(u);state.user=u;state.history=[];notify('Cadastro criado','Seu perfil foi criado neste aparelho. A verificação de identidade ainda é simulada no MVP.');syncUser();setSession(email);showApp();toast('Cadastro criado com sucesso.');return;
-  }
-  if(e.target.id==='login-form'){
-    e.preventDefault();const email=document.querySelector('#login-email').value.trim().toLowerCase(),password=document.querySelector('#login-password').value;
-    const u=state.users.find(x=>x.email===email&&x.password===password);
-    if(!u){toast('E-mail ou senha não encontrados neste aparelho.');return;}
-    state.user=u;setSession(email);showApp();toast(`Bem-vindo, ${firstName(u.name)}.`);return;
-  }
-  if(e.target.id==='request-step-1'){
-    e.preventDefault();const u=currentUser();const val=Number(document.querySelector('#req-value').value),category=document.querySelector('#req-category').value;
-    if(val<20||val>u.limitPerRequest){toast(`O valor deve ficar entre R$ 20 e ${brl(u.limitPerRequest)}.`);return;}
-    if((u.receivedMonth||0)+val>u.monthlyLimit){toast('Este pedido ultrapassaria seu limite mensal disponível.');return;}
-    state.requestDraft.value=val;state.requestDraft.category=category;state.requestStep=2;renderRequest();return;
-  }
-  if(e.target.id==='request-step-2'){
-    e.preventDefault();state.requestDraft.description=document.querySelector('#req-description').value.trim();state.requestDraft.time=document.querySelector('#req-time').value;state.requestStep=3;renderRequest();return;
-  }
-  if(e.target.id==='request-final-form'){
-    e.preventDefault();const u=currentUser(),d=state.requestDraft,val=Number(d.value);
-    state.requests.unshift({id:Date.now(),name:u.name,category:d.category,description:d.description,goal:val,raised:0,helpers:0,verified:u.verified,time:d.time==='24 horas'?'24h restantes':'48h restantes',createdBy:u.id,createdAt:'Agora'});
-    u.nextRequestDays=7;syncUser();state.history.unshift({type:'Pedido publicado',person:'Aguardando contribuições',value:0,date:'Agora',userId:u.id});notify('Pedido publicado',`Seu pedido de ${brl(val)} foi publicado no protótipo.`);resetRequestFlow();state.view='home';saveState();render();toast('Pedido publicado no protótipo.');return;
-  }
-  if(e.target.id==='profile-form'){
-    e.preventDefault();const u=currentUser();const name=document.querySelector('#profile-name').value.trim();if(!name)return;u.name=name;syncUser();renderProfile();toast('Nome atualizado neste aparelho.');return;
-  }
-  if(e.target.id==='contribute-form'&&e.submitter?.id==='confirm-contribution'){
-    e.preventDefault();const r=state.activeRequest,u=currentUser(),v=Math.min(Number(state.selectedAmount),r.goal-r.raised);if(v<=0)return;
-    r.raised=Math.round((r.raised+v)*100)/100;r.helpers+=1;u.helped+=1;u.contributed=Math.round((u.contributed+v)*100)/100;
-    state.history.unshift({type:'Ajudou',person:publicName(r.name),value:v,date:'Agora',userId:u.id});syncUser();notify('Contribuição registrada',`Você simulou uma contribuição de ${brl(v)} para ${publicName(r.name)}.`);dlg.close();saveState();render();toast(`Contribuição simulada de ${brl(v)} registrada.`);return;
-  }
-});
+  dialog.addEventListener('cancel', event => { event.preventDefault(); back(); });
+  window.addEventListener('popstate', () => applyRoute(readRoute()));
+  window.addEventListener('online', () => { updateSync(); if (hasSession() && state.view !== 'request' && state.view !== 'profile' && !state.modalRequestId) loadData().catch(() => {}); });
+  window.addEventListener('offline', updateSync);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && hasSession() && !state.recovery && state.view !== 'request' && state.view !== 'profile' && !state.modalRequestId && Date.now() - state.loadedAt > 30000) loadData().catch(() => {});
+  });
+  setInterval(() => {
+    if (!document.hidden && navigator.onLine && hasSession() && !state.recovery && state.view !== 'request' && state.view !== 'profile' && !state.modalRequestId && Date.now() - state.loadedAt >= 60000) loadData().catch(() => {});
+  }, 15000);
 
-init();
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}
+  // Keep the callback synchronous. Supabase operations run in the next task,
+  // outside the Auth lock held while onAuthStateChange notifies listeners.
+  if (backend?.client) backend.client.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') state.recovery = true;
+    if (event === 'SIGNED_OUT') { clearAccount(); return; }
+    setTimeout(() => receiveSession(session, event).catch(() => {}), 0);
+  });
+
+  // Small navigation API retained for integrations; buttons use one delegated
+  // click handler to avoid the duplicate Safari navigation of the prototype.
+  window.Somma = Object.freeze({ go: view => navigate(view), openDetails: id => navigate('detail', String(id)), openContribution: id => openContribution(String(id)), openNotifications: () => navigate('notifications'), back });
+  bootstrap();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+})();
