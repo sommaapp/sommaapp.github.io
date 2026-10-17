@@ -3,7 +3,7 @@ SOMMA — BACKEND V1
 PWA de apoio colaborativo integrada ao Supabase para contas, pedidos,
 contribuições simuladas, histórico e notificações. Implementação e QA controlada
 concluídas; a branch remota de revisão somma/backend-v1-integration foi criada
-com sucesso. Publicação na main ainda pendente.
+com sucesso. PR nº 1 em draft, sem merge; publicação na main ainda pendente.
 
 Não processa dinheiro real. Não há Pix, carteira, repasse ou cobrança.
 Dados, usuários e senhas da demonstração local não são importados.
@@ -17,8 +17,8 @@ PREPARAÇÃO
    senha de banco ou token administrativo no frontend/repositório público.
 3. Login no Dashboard concluído. Site URL salvo: https://sommaapp.github.io/
    Allowlist: exatamente https://sommaapp.github.io/ (1 URL).
-   Custom SMTP desligado: serviço e templates padrão em uso. Para SMTP próprio,
-   escolher provedor e domínio remetente e fornecer credenciais por fluxo seguro.
+   Custom SMTP da Brevo e os modelos de confirmação e recuperação foram salvos
+   e conferidos após recarregamento.
    Manter a confirmação de e-mail ativa.
 4. Para servir a raiz localmente:
    python3 -m http.server 8080 --bind 127.0.0.1
@@ -39,8 +39,10 @@ Quatro migrações aplicadas. Security Advisor sem avisos após a correção.
 Suíte SQL: 56/56 verificações sequenciais aprovadas, com rollback dos dados de teste.
 Frontend: 18/18 lógica e 19/19 Chromium; zero exceções JS; layouts inspecionados.
 SDK real na QA, com Auth/Data API interceptadas e service worker bloqueado.
-Concorrência entre sessões, SMTP próprio, entrega de e-mail, Auth de ponta a ponta,
-PWA instalado e testes físicos de iPhone/Safari e Android/Chrome ainda pendentes.
+Concorrência entre sessões, liberação do envio transacional na Brevo,
+rastreamento/reescrita dos links, entrega de e-mail e Auth de ponta a ponta
+ainda pendentes. PWA instalado e testes físicos de iPhone/Safari e Android/Chrome
+também permanecem pendentes.
 E-mail confirmado não equivale a identidade verificada.
 
 Regras de limites, privacidade, prazo, idempotência e taxa ficam no servidor.
