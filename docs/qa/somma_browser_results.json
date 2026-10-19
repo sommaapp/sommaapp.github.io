@@ -1,0 +1,35 @@
+{
+  "browser": "155.0.8059.84",
+  "checks": [
+    "SDK loads and initial auth has no fictitious users",
+    "legacy password fields removed without altering demo data",
+    "signup waits for email confirmation",
+    "login errors are visible without opening private screens",
+    "real SDK sign-in loads names and requests through adapter",
+    "native history returns from details to Ajudar",
+    "contribution fee is displayed before confirming",
+    "lost response recovers one contribution via same key",
+    "second contribution uses a new intention but one unique helper",
+    "request three-step flow sends controlled fields and 24h duration",
+    "own active request blocks a second request",
+    "history separates publication from received support",
+    "profile name update renders abbreviated public name",
+    "notification marking persists and clears badge",
+    "offline state is communicated",
+    "mobile layout avoids horizontal overflow",
+    "logout remains logged out after refresh",
+    "recovery link opens dedicated password form without deadlock",
+    "no unhandled JavaScript errors"
+  ],
+  "errors": [],
+  "requests": 54,
+  "contributions": 2,
+  "requestPosts": 1,
+  "environment": "Chromium with real pinned Supabase SDK and intercepted Auth/Data API responses",
+  "verified_date_utc": "2026-10-17",
+  "limitations": [
+    "No remote users, emails or database mutations",
+    "Service worker blocked during UI tests",
+    "Real iPhone/Android and hosted email flow not tested"
+  ]
+}

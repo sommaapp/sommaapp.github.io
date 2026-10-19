@@ -1,0 +1,14 @@
+# Instalação local das ferramentas
+/tooling/node_modules/
+
+# Saída intermediária do gerador de vendor; vendor/ da raiz deve ser versionado
+/tooling/vendor-output/
+
+# Relatórios locais de testes de navegador
+/test-results/
+/playwright-report/
+
+# Credenciais locais
+.env
+.env.*
+!.env.example

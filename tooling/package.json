@@ -1,0 +1,20 @@
+{
+  "name": "somma-backend-v1-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reproducible local copy of the pinned Supabase browser SDK used by Somma.",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "npm@11.9.0",
+  "scripts": {
+    "vendor:sync": "node scripts/vendor-supabase.mjs",
+    "vendor:check": "node scripts/vendor-supabase.mjs --check",
+    "test:logic": "node ../tests/frontend-logic.test.cjs",
+    "test:browser": "node ../tests/frontend-browser.test.cjs"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "playwright": "1.62.1"
+  }
+}
