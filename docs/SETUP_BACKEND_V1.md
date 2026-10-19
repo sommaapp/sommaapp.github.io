@@ -47,7 +47,7 @@ A suíte SQL sequencial executada no projeto hospedado passou **56 de 56 verific
 - [x] `AUTH_SMTP_ESTADO`: leitura direta após navegação/recarregamento confirmou `Toggle SMTP = 1`, nome `Somma`, host `smtp-relay.brevo.com`, porta `465` e **Save changes** desabilitado. Essa conferência de persistência no painel não comprova entregabilidade.
 - [x] `SMTP_PREPARACAO`: Brevo Free escolhida pelo usuário; conta acessada, remetente Somma verificado e validação de telefone concluída. Credencial SMTP exclusiva ativa, inserida no Supabase por fluxo seguro; dados de contato e credenciais não são registrados. Detalhes no [guia de configuração](SMTP_EMAIL_SETUP.md).
 - [x] `AUTH_SMTP_ENTREGA_REAL`: confirmação de cadastro e recuperação de senha chegaram ao destinatário de teste autorizado e os links funcionaram no fluxo real. Foi observado pequeno atraso de entrega, sem falha funcional.
-- [ ] `PENDENTE — SMTP_TRACKING`: confirmar explicitamente o estado do rastreamento/reescrita de links na Brevo; a entrega real foi validada, mas esse controle específico não foi comprovado.
+- [x] `SMTP_TRACKING_REVISAO`: na Brevo, `Rastreamento de e-mail anônimo` foi verificado como **Não**. Não foi encontrado controle separado para desativar rastreamento de cliques/reescrita em e-mails transacionais. Como os links reais de confirmação e recuperação funcionaram de ponta a ponta, isso não é tratado como bloqueio funcional do piloto; registrar apenas como característica operacional do provedor.
 - [x] `AUTH_TEMPLATES_READBACK`: confirmação e recuperação relidas após navegação completa/recarregamento; HTMLs e assuntos persistidos exatamente, com três ocorrências de `{{ .ConfirmationURL }}` em cada editor. **Save changes** desabilitado, sem alteração pendente; ambas as prévias visuais corretas.
 - [x] `SQL_TESTS`: 56/56 verificações sequenciais no projeto hospedado em 17/10/2026 às 00:14:33 UTC; `ROLLBACK` seguido de contagem zero nas relações de usuários e uso verificadas. Relatório: `tests/backend_v1_results.json`.
 - [x] `CONCORRENCIA_SESSOES`: três sessões simultâneas reais (PC, iPhone e navegador anônimo) registradas no Supabase; alteração de perfil sincronizada entre as três.
@@ -262,7 +262,7 @@ Os vídeos do pacote de continuidade verificavam o protótipo local no iPhone. N
 
 Para testar fluxos de e-mail sem entrega externa, o Supabase local disponibiliza Mailpit, que captura as mensagens localmente. Esse teste não substitui a conferência do SMTP hospedado. Não disparar cadastros, recuperação, reenvios ou convites para terceiros como teste automático. [3]
 
-Antes de declarar a fase concluída para produção ampla, registrar os itens ainda pendentes com data, ambiente e revisão verificada. No estado atual: **Auth de ponta a ponta, múltiplas sessões e PWA em PC+iPhone estão validados; Android físico, tracking/reescrita do SMTP e publicação na `main` permanecem pendentes**.
+Antes de declarar a fase concluída para produção ampla, registrar os itens ainda pendentes com data, ambiente e revisão verificada. No estado atual: **Auth de ponta a ponta, múltiplas sessões, SMTP do piloto e PWA em PC+iPhone estão validados; Android físico e publicação na `main` permanecem pendentes**.
 
 ## 8. Referências oficiais
 
