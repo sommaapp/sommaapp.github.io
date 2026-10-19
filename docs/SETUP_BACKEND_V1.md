@@ -58,7 +58,7 @@ A suíte SQL sequencial executada no projeto hospedado passou **56 de 56 verific
 - [x] `AUTH_E2E`: cadastro real, e-mail de confirmação, callback para o preview, login, recuperação de senha, definição de nova senha e novo login validados com conta de teste autorizada.
 - [x] `IPHONE_PWA`: instalação na Tela de Início e abertura offline do shell validadas em iPhone real; o app exibiu estado sem conexão corretamente.
 - [x] `DESKTOP_PWA`: instalação no Chrome/Windows, service worker ativo, cache `somma-app-backend-v1.1` e abertura offline do shell validados.
-- [ ] `PENDENTE — ANDROID`: validar instalação e comportamento em Android/Chrome real.
+- [ ] `ANDROID_NAO_TESTADO`: Android/Chrome físico não foi testado por indisponibilidade de dispositivo. Esta limitação não é tratada como bloqueio do piloto; manter registrada para validação futura quando houver aparelho disponível.
 
 ### Acesso e revisão no GitHub
 
@@ -262,7 +262,7 @@ Os vídeos do pacote de continuidade verificavam o protótipo local no iPhone. N
 
 Para testar fluxos de e-mail sem entrega externa, o Supabase local disponibiliza Mailpit, que captura as mensagens localmente. Esse teste não substitui a conferência do SMTP hospedado. Não disparar cadastros, recuperação, reenvios ou convites para terceiros como teste automático. [3]
 
-Antes de declarar a fase concluída para produção ampla, registrar os itens ainda pendentes com data, ambiente e revisão verificada. No estado atual: **Auth de ponta a ponta, múltiplas sessões, SMTP do piloto e PWA em PC+iPhone estão validados; Android físico e publicação na `main` permanecem pendentes**.
+Antes de declarar a fase concluída para produção ampla, registrar os itens ainda pendentes com data, ambiente e revisão verificada. No estado atual: **Auth de ponta a ponta, múltiplas sessões, SMTP do piloto e PWA em PC+iPhone estão validados. Android físico não foi testado por indisponibilidade de dispositivo e fica como limitação conhecida, não bloqueadora do piloto. A publicação na `main` permanece pendente até o merge.**
 
 ## 8. Referências oficiais
 
