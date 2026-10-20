@@ -74,7 +74,24 @@ BEGIN
 
   SELECT count(*) INTO n FROM public.notifications WHERE user_id <> auth.uid();
   IF n <> 0 THEN RAISE EXCEPTION 'Alpha can read another user notifications'; END IF;
-END $$;
+
+  -- Negative authorization checks: changing or deleting Bravo's request
+  -- must not affect any row when Alpha is authenticated.
+  UPDATE public.requests SET description = 'Unauthorized edit attempt'
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'Alpha updated Bravo request'; END IF;
+
+  DELETE FROM public.requests
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'Alpha deleted Bravo request'; END IF;
+
+  UPDATE public.notifications SET read_at = now()
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'Alpha updated Bravo notification'; END IF;
+END $;
 
 SELECT set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',false);
 DO $$
@@ -95,7 +112,22 @@ BEGIN
 
   SELECT count(*) INTO n FROM public.notifications WHERE user_id <> auth.uid();
   IF n <> 0 THEN RAISE EXCEPTION 'Bravo can read another user notifications'; END IF;
-END $$;
+
+  UPDATE public.requests SET description = 'Unauthorized edit attempt'
+  WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'Bravo updated Alpha request'; END IF;
+
+  DELETE FROM public.requests
+  WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'Bravo deleted Alpha request'; END IF;
+
+  UPDATE public.notifications SET read_at = now()
+  WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 0 THEN RAISE EXCEPTION 'Bravo updated Alpha notification'; END IF;
+END $;
 
 RESET ROLE;
 ROLLBACK;
