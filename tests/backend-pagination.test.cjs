@@ -60,7 +60,7 @@ const api = context.window.SommaBackend;
   assert.match(captured.at(-1).orExpression, /created_at\.lt\./);
   assert.match(captured.at(-1).orExpression, /created_at\.eq\./);
   assert.match(captured.at(-1).orExpression, /id\.lt\./);
-  assert.equal((captured.at(-1).orExpression.match(/and\(/g) || []).length, 4,
+  assert.equal((captured.at(-1).orExpression.match(/and\(/g) || []).length, 6,
     'cursor and expiry constraints are combined into one OR expression');
 
   resultRows = [];
