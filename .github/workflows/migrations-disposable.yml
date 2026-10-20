@@ -127,7 +127,35 @@ jobs:
                OR has_function_privilege('authenticated', 'private.validate_contribution_insert()', 'EXECUTE') THEN
               RAISE EXCEPTION 'trigger-only contribution validator is directly executable';
             END IF;
-          END $$;
+          END $;
+
+          -- Every private SECURITY DEFINER function must pin an empty search_path.
+          -- Only the RLS predicate is callable by authenticated; none are callable by anon.
+          DO $catalog$
+          DECLARE f record;
+          BEGIN
+            FOR f IN
+              SELECT p.oid, p.proname, p.proconfig
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private' AND p.prosecdef AND p.prokind = 'f'
+            LOOP
+              IF NOT coalesce(f.proconfig @> ARRAY['search_path=""']::text[], false) THEN
+                RAISE EXCEPTION 'private SECURITY DEFINER function % does not pin an empty search_path', f.proname;
+              END IF;
+              IF has_function_privilege('anon', f.oid, 'EXECUTE') THEN
+                RAISE EXCEPTION 'anon can execute private SECURITY DEFINER function %', f.proname;
+              END IF;
+              IF f.proname <> 'can_read_request'
+                 AND has_function_privilege('authenticated', f.oid, 'EXECUTE') THEN
+                RAISE EXCEPTION 'authenticated can execute unexpected private SECURITY DEFINER function %', f.proname;
+              END IF;
+            END LOOP;
+
+            IF NOT has_function_privilege('authenticated', 'private.can_read_request(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated cannot execute private.can_read_request';
+            END IF;
+          END $catalog$;
           SQL
       - name: Test two-user isolation against migrated schema
         run: docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-real-migrations.integration.sql
