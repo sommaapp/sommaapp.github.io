@@ -177,6 +177,33 @@ BEGIN
     v_failed := true;
   END;
   IF NOT v_failed THEN RAISE EXCEPTION 'contribution above remaining goal was accepted'; END IF;
+
+  -- An active request owned by a suspended account must not accept support.
+  v_failed := false;
+  SELECT id INTO v_request FROM public.requests
+  WHERE user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  BEGIN
+    INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
+    VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'beneficiary_not_active' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'contribution to suspended beneficiary was accepted'; END IF;
+
+  -- An expired request must reject new contributions even if its status field
+  -- still says active (the expiration timestamp is authoritative).
+  v_failed := false;
+  SELECT id INTO v_request FROM public.requests
+  WHERE user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  BEGIN
+    INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
+    VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'request_expired' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'contribution to expired request was accepted'; END IF;
 END $test$ LANGUAGE plpgsql;
 
 -- Reuse a synthetic key to prove the unique idempotency constraint rejects
