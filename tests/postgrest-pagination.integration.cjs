@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict');
 
 const baseUrl = 'http://localhost:3000/requests';
-const firstCursorTime = '2026-10-20T10:00:00.000Z';
 const now = new Date().toISOString();
 
 function buildUrl(cursor) {
@@ -25,7 +24,7 @@ function buildUrl(cursor) {
     }
     params.set('or', `(${branches.join(',')})`);
   }
-  params.set('limit', '3');
+  params.set('limit', '2');
   return `${baseUrl}?${params.toString()}`;
 }
 
@@ -38,22 +37,22 @@ async function getRows(cursor) {
 
 (async () => {
   const first = await getRows(null);
-  assert.equal(first.length, 3, 'first page returns three eligible synthetic rows');
+  assert.equal(first.length, 2, 'first page returns two eligible synthetic rows');
   assert(first.every(row => row.status === 'active'), 'status filter excludes completed rows');
   assert(first.every(row => row.expires_at === null || Date.parse(row.expires_at) > Date.parse(now)),
     'expiry filter excludes expired rows');
   assert.deepEqual(first.map(row => row.id), [
     '33333333-3333-4333-8333-333333333333',
-    '22222222-2222-4222-8222-222222222222',
-    '11111111-1111-4111-8111-111111111111'
+    '22222222-2222-4222-8222-222222222222'
   ], 'same-timestamp records use UUID as stable tie-breaker');
 
-  const cursor = { created_at: firstCursorTime, id: '22222222-2222-4222-8222-222222222222' };
+  const last = first.at(-1);
+  const cursor = { created_at: last.created_at, id: last.id };
   const next = await getRows(cursor);
   assert.equal(next.length, 1, 'cursor returns only the remaining eligible row');
   assert.equal(next[0].id, '11111111-1111-4111-8111-111111111111');
   assert(!first.some(row => next.some(nextRow => nextRow.id === row.id)),
-    'this fixed-cursor check does not overlap returned IDs');
+    'consecutive pages do not overlap');
   console.log('PASS PostgREST parses nested expiry/cursor OR expression and applies filters');
 })().catch(error => {
   console.error(error);
