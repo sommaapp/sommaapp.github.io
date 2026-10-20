@@ -10,9 +10,9 @@ Executar uma regressão em PostgreSQL descartável para o isolamento entre dois 
 - O script usa apenas identificadores sintéticos e termina com ROLLBACK.
 
 ## Limitação
-O teste recria em tabelas mínimas as formas das políticas observadas no catálogo do projeto. Não importa nem testa diretamente as políticas de produção, os JWTs emitidos pelo Supabase, os grants completos ou a função `private.can_read_request`. É uma regressão do padrão de autorização, não uma certificação da RLS de produção.
+O teste usa tabelas mínimas sintéticas com nomes/colunas compatíveis e espelha o corpo SQL de `private.can_read_request` da migração versionada. Não carrega a migração integral nem executa o objeto instalado em produção; as políticas de outras tabelas e os grants completos também são recriados de forma reduzida. Não cobre JWTs emitidos pelo Supabase. É uma regressão contra deriva lógica do predicado, não uma certificação da RLS de produção.
 
-Antes de considerar a autorização validada, importar as migrações versionadas no ambiente descartável ou reproduzir fielmente o esquema necessário, e testar a função real com proprietário, colaborador, pedido ativo/não expirado e conta suspensa.
+Próximo passo: preparar um ambiente descartável que aplique as migrações versionadas completas e valide as políticas e grants efetivamente criados, com fixtures sintéticas para proprietário, colaborador, pedido ativo/não expirado, pedido expirado e conta suspensa.
 
 ## Execução
 O workflow usa PostgreSQL 16 descartável no GitHub Actions e remove os contêineres mesmo em caso de falha. Não usa credenciais, rede ou dados de produção; nenhuma migração ou configuração do Supabase é alterada.
