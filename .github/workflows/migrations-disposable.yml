@@ -6,6 +6,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - '.github/workflows/migrations-disposable.yml'
+      - 'tests/postgres-rls-real-migrations.integration.sql'
   workflow_dispatch:
 
 permissions:
@@ -84,6 +85,8 @@ jobs:
             END IF;
           END $$;
           SQL
+      - name: Test two-user isolation against migrated schema
+        run: docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-real-migrations.integration.sql
       - name: Stop disposable containers
         if: always()
         run: |
