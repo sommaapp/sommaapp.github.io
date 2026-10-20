@@ -1,4 +1,4 @@
-name: Apply Supabase migrations on disposable PostgreSQL
+name: Apply Supabase migrations on disposable PostgreSQL # includes concurrency regression
 
 on:
   pull_request:
