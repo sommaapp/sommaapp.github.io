@@ -16,3 +16,6 @@ Antes de considerar a autorização validada, importar as migrações versionada
 
 ## Execução
 O workflow usa PostgreSQL 16 descartável no GitHub Actions e remove os contêineres mesmo em caso de falha. Não usa credenciais, rede ou dados de produção; nenhuma migração ou configuração do Supabase é alterada.
+
+## Resultado registrado
+A execução 6 do GitHub Actions passou após corrigir os delimitadores da função SQL no script: https://github.com/sommaapp/sommaapp.github.io/actions/runs/39482773989. O resultado valida somente este esquema mínimo sintético; as limitações acima permanecem.
