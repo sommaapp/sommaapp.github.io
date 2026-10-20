@@ -7,6 +7,7 @@ on:
       - 'supabase/migrations/**'
       - '.github/workflows/migrations-disposable.yml'
       - 'tests/postgres-rls-real-migrations.integration.sql'
+      - 'tests/postgres-contribution-concurrency.sh'
   workflow_dispatch:
 
 permissions:
@@ -130,6 +131,8 @@ jobs:
           SQL
       - name: Test two-user isolation against migrated schema
         run: docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-real-migrations.integration.sql
+      - name: Test concurrent beneficiary monthly limit
+        run: bash tests/postgres-contribution-concurrency.sh
       - name: Stop disposable containers
         if: always()
         run: |
