@@ -27,7 +27,6 @@
   // Server-side constraints in the companion migration remain the authoritative guard.
   const containsSensitiveText = value => {
     const text = String(value ?? '');
-    const digits = text.replace(/\D/g, '');
     const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text);
     const hasCpf = /(?:^|\D)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?:\D|$)/.test(text);
     const hasCep = /(?:^|\D)\d{5}-?\d{3}(?:\D|$)/.test(text);
