@@ -27,3 +27,6 @@ Foi adicionado um workflow separado que aplica todas as migrações em PostgreSQ
 A execução 4 do workflow de migrações passou incluindo um teste adicional de dois usuários contra as tabelas, políticas e triggers criados pelas migrações versionadas: https://github.com/sommaapp/sommaapp.github.io/actions/runs/39484323476. O cenário usa usuários sintéticos criados em `auth.users`, testa leitura de perfil, pedidos, contribuições e notificações, além de verificar que pedidos expirados e de conta suspensa não aparecem no feed. Os dados são revertidos com ROLLBACK e o PostgreSQL é descartável.
 
 Limitação restante: o ambiente usa uma camada mínima compatível com `auth.uid()`, não a infraestrutura completa de Supabase Auth/JWT; também não representa tráfego ou configuração de produção.
+
+### Testes negativos de autorização
+A execução 9 do workflow de migrações passou após acrescentar verificações de que o papel `authenticated` não possui privilégios de UPDATE/DELETE em `public.requests` nem UPDATE em `public.notifications`: https://github.com/sommaapp/sommaapp.github.io/actions/runs/39485452832. A execução anterior havia falhado porque o próprio teste tentou executar UPDATE sem privilégio e o PostgreSQL corretamente retornou `permission denied`; o teste foi ajustado para validar os privilégios catalogados sem interromper a execução.
