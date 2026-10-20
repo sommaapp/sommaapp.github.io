@@ -1,0 +1,91 @@
+name: Apply Supabase migrations on disposable PostgreSQL
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/migrations-disposable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start disposable PostgreSQL
+        run: |
+          docker network create somma-migrations-test
+          docker run -d --name somma-migrations-pg --network somma-migrations-test -e POSTGRES_PASSWORD=testpass -e POSTGRES_USER=postgres postgres:16
+          for i in {1..30}; do
+            if docker exec somma-migrations-pg pg_isready -U postgres; then break; fi
+            sleep 2
+          done
+          docker exec somma-migrations-pg pg_isready -U postgres
+      - name: Prepare minimal Supabase Auth compatibility layer
+        run: |
+          docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+          CREATE ROLE anon NOLOGIN;
+          CREATE ROLE authenticated NOLOGIN;
+          CREATE ROLE service_role NOLOGIN BYPASSRLS;
+          CREATE SCHEMA auth;
+          CREATE TABLE auth.users (
+            id uuid PRIMARY KEY,
+            raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+            created_at timestamptz NOT NULL DEFAULT now()
+          );
+          CREATE FUNCTION auth.uid() RETURNS uuid
+          LANGUAGE sql STABLE
+          AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+          GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+          GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+          SQL
+      - name: Apply every versioned migration in order
+        run: |
+          set -euo pipefail
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying ${migration}"
+            docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "${migration}"
+          done
+      - name: Verify key RLS objects and privileges
+        run: |
+          docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private' AND p.proname = 'can_read_request'
+            ) THEN
+              RAISE EXCEPTION 'private.can_read_request was not created';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_policies
+              WHERE schemaname = 'public' AND tablename = 'requests'
+                AND policyname = 'requests_read'
+            ) THEN
+              RAISE EXCEPTION 'requests_read policy was not created';
+            END IF;
+            IF NOT (
+              SELECT c.relrowsecurity FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relname = 'requests'
+            ) THEN
+              RAISE EXCEPTION 'RLS is not enabled on public.requests';
+            END IF;
+            IF has_function_privilege('anon', 'private.can_read_request(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'anon unexpectedly can execute private.can_read_request';
+            END IF;
+            IF NOT has_function_privilege('authenticated', 'private.can_read_request(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated cannot execute private.can_read_request';
+            END IF;
+          END $$;
+          SQL
+      - name: Stop disposable containers
+        if: always()
+        run: |
+          docker rm -f somma-migrations-pg || true
+          docker network rm somma-migrations-test || true
