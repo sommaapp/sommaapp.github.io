@@ -9,6 +9,7 @@
   const CATEGORIES = ['Combustível', 'Alimentação', 'Transporte', 'Medicamentos', 'Conta essencial', 'Trabalho', 'Emergência', 'Outro'];
   const VIEWS = new Set(['home', 'help', 'request', 'history', 'profile', 'detail', 'notifications']);
   const INTENT_KEY = 'somma_backend_v1_pending_contribution';
+  const MIN_PASSWORD_LENGTH = 12;
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const initialHash = location.hash;
   let legacyCredentialsCleaned = false;
@@ -111,7 +112,7 @@
     const messages = {
       invalid_credentials: 'E-mail ou senha incorretos.',
       email_not_confirmed: 'Confirme seu e-mail antes de entrar. Verifique também a caixa de spam.',
-      weak_password: 'Escolha uma senha mais forte, com pelo menos 8 caracteres.',
+      weak_password: 'Escolha uma senha com pelo menos 12 caracteres.',
       same_password: 'Escolha uma senha diferente da senha atual.',
       email_address_invalid: 'Confira o endereço de e-mail informado.',
       email_address_not_authorized: 'O envio de e-mails de acesso ainda precisa ser habilitado para este endereço pela Somma.',
@@ -618,10 +619,12 @@
         if (error) throw error;
         await receiveSession(data.session);
       } else if (form.id === 'signup-form') {
+        const password = $('#signup-password').value;
+        if (password.length < MIN_PASSWORD_LENGTH) throw { code: 'weak_password' };
         const name = $('#signup-name').value.trim();
         if (name.length < 2) throw { code: 'invalid_full_name' };
         const email = $('#signup-email').value.trim().toLowerCase();
-        const { data, error } = await auth.signUp({ email, password: $('#signup-password').value, options: { data: { full_name: name }, emailRedirectTo: config.siteUrl } });
+        const { data, error } = await auth.signUp({ email, password, options: { data: { full_name: name }, emailRedirectTo: config.siteUrl } });
         $('#signup-password').value = '';
         if (error) throw error;
         state.confirmEmail = email;
@@ -637,6 +640,7 @@
         feedback('#auth-feedback', 'Se houver uma conta para este e-mail, você receberá um link para definir uma nova senha.', true);
       } else if (form.id === 'recovery-form') {
         const password = $('#recovery-password').value;
+        if (password.length < MIN_PASSWORD_LENGTH) throw { code: 'weak_password' };
         if (password !== $('#recovery-confirm').value) { feedback('#auth-feedback', 'As senhas precisam ser iguais.'); return; }
         const { error } = await auth.updateUser({ password });
         $('#recovery-password').value = '';
