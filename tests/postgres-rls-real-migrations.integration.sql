@@ -152,6 +152,31 @@ BEGIN
     v_failed := true;
   END;
   IF NOT v_failed THEN RAISE EXCEPTION 'self-contribution was accepted'; END IF;
+
+  -- Non-positive amounts must be rejected by the production validation trigger.
+  v_failed := false;
+  SELECT id INTO v_request FROM public.requests
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  BEGIN
+    INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
+    VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 0);
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'invalid_contribution_amount' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'zero-value contribution was accepted'; END IF;
+
+  -- Alpha has already contributed 1000 to Bravo's 5000 goal, so 4001
+  -- exceeds the remaining 4000 and must be rejected.
+  v_failed := false;
+  BEGIN
+    INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
+    VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 4001);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'contribution_exceeds_remaining_goal' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'contribution above remaining goal was accepted'; END IF;
 END $test$ LANGUAGE plpgsql;
 
 -- Reuse a synthetic key to prove the unique idempotency constraint rejects
