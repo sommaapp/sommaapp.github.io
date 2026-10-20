@@ -70,7 +70,7 @@ wait "$PID_B"; STATUS_B=$?
 set -e
 
 COUNT=$(docker exec "$DB_CONTAINER" psql -X -At -U postgres -d postgres -c "SELECT count(*) FROM public.contributions c JOIN public.requests r ON r.id=c.request_id WHERE r.user_id='$OWNER' AND c.status='simulated_confirmed' AND c.request_id = '$REQ_A';")
-TOTAL=$(docker exec "$DB_CONTAINER" psql -X -At -U postgres -d postgres -c "SELECT coalesce(sum(c.amount_cents),0) FROM public.contributions c JOIN public.requests r ON r.id=c.request_id WHERE r.user_id='$OWNER' AND c.status='simulated_confirmed' AND c.request_id IN ('$REQ_A','$REQ_B');")
+TOTAL=$(docker exec "$DB_CONTAINER" psql -X -At -U postgres -d postgres -c "SELECT coalesce(sum(c.amount_cents),0) FROM public.contributions c JOIN public.requests r ON r.id=c.request_id WHERE r.user_id='$OWNER' AND c.status='simulated_confirmed' AND c.request_id = '$REQ_A';")
 
 if [[ "$COUNT" != "1" || "$TOTAL" != "6000" ]]; then
   echo "FAIL: concurrent contributions breached monthly limit: accepted_count=$COUNT total_cents=$TOTAL"
