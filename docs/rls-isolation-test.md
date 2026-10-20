@@ -22,3 +22,8 @@ A execução 6 do GitHub Actions passou após corrigir os delimitadores da funç
 
 ## Validação das migrações versionadas
 Foi adicionado um workflow separado que aplica todas as migrações em PostgreSQL descartável com uma camada mínima compatível com Supabase Auth e verifica a criação da função/política RLS e os privilégios básicos. A execução 1 passou: https://github.com/sommaapp/sommaapp.github.io/actions/runs/39484044721. Isso valida a aplicação das migrações nesse ambiente compatível, mas ainda não é um teste de isolamento com usuários sintéticos sobre as tabelas reais; essa etapa segue como próxima evolução.
+
+## Isolamento contra o esquema migrado
+A execução 4 do workflow de migrações passou incluindo um teste adicional de dois usuários contra as tabelas, políticas e triggers criados pelas migrações versionadas: https://github.com/sommaapp/sommaapp.github.io/actions/runs/39484323476. O cenário usa usuários sintéticos criados em `auth.users`, testa leitura de perfil, pedidos, contribuições e notificações, além de verificar que pedidos expirados e de conta suspensa não aparecem no feed. Os dados são revertidos com ROLLBACK e o PostgreSQL é descartável.
+
+Limitação restante: o ambiente usa uma camada mínima compatível com `auth.uid()`, não a infraestrutura completa de Supabase Auth/JWT; também não representa tráfego ou configuração de produção.
