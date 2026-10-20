@@ -56,7 +56,7 @@ ALTER TABLE public.requests ENABLE TRIGGER requests_validate_insert;
 
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
-DO $$
+DO $test$
 DECLARE n integer;
 BEGIN
   SELECT count(*) INTO n FROM public.profiles;
@@ -94,7 +94,7 @@ BEGIN
 END $;
 
 SELECT set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',false);
-DO $$
+DO $test$
 DECLARE n integer;
 BEGIN
   SELECT count(*) INTO n FROM public.profiles;
