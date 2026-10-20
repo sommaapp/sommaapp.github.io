@@ -268,14 +268,13 @@ begin
     raise exception 'self_contribution_not_allowed';
   end if;
 
-  -- Exclusive profile locks serialize monthly-limit checks for a beneficiary
-  -- even when concurrent contributions target different requests. FOR SHARE
-  -- is insufficient: compatible locks allow both transactions to SUM the same
-  -- pre-commit total and jointly exceed the monthly cap. All paths acquire
-  -- profile locks before request locks; UUID ordering keeps acquisition stable.
+  -- Shared profile locks protect account status and the beneficiary's limit.
+  -- A user can have only one active request (partial unique index), and the
+  -- request row is locked before the monthly SUM, serializing contributions
+  -- to that beneficiary's active request. UUID ordering stabilizes profile locks.
   perform p.id from public.profiles p
   where p.id in (new.contributor_user_id, v_owner)
-  order by p.id for update;
+  order by p.id for share;
 
   select account_status into v_contributor_status
   from public.profiles where id = new.contributor_user_id;
