@@ -177,6 +177,7 @@
   window.SommaBackend = Object.freeze({
     client,
     snapshot,
+    requestPage,
     findContribution,
     contribute,
     createRequest: values => unwrap(client.from('requests').insert({
