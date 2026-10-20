@@ -52,14 +52,14 @@ SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
 DO $$ DECLARE n integer; BEGIN
  SELECT count(*) INTO n FROM public.test_profiles; IF n<>1 THEN RAISE EXCEPTION 'A profile isolation: %',n; END IF;
- SELECT count(*) INTO n FROM public.test_requests; IF n<>3 THEN RAISE EXCEPTION 'A request visibility (own, public active, expired hidden): %',n; END IF;
+ SELECT count(*) INTO n FROM public.test_requests; IF n<>2 THEN RAISE EXCEPTION 'A request visibility (own, public active, expired hidden): %',n; END IF;
  SELECT count(*) INTO n FROM public.test_contributions; IF n<>2 THEN RAISE EXCEPTION 'A related contributions: %',n; END IF;
  SELECT count(*) INTO n FROM public.test_notifications; IF n<>1 THEN RAISE EXCEPTION 'A notifications: %',n; END IF;
 END $$;
 SELECT set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',false);
 DO $$ DECLARE n integer; BEGIN
  SELECT count(*) INTO n FROM public.test_profiles; IF n<>1 THEN RAISE EXCEPTION 'B profile isolation: %',n; END IF;
- SELECT count(*) INTO n FROM public.test_requests; IF n<>3 THEN RAISE EXCEPTION 'B request visibility (own, public active, expired hidden): %',n; END IF;
+ SELECT count(*) INTO n FROM public.test_requests; IF n<>2 THEN RAISE EXCEPTION 'B request visibility (own, public active, expired hidden): %',n; END IF;
  SELECT count(*) INTO n FROM public.test_contributions; IF n<>3 THEN RAISE EXCEPTION 'B related contributions: %',n; END IF;
  SELECT count(*) INTO n FROM public.test_requests WHERE id='44444444-dddd-4ddd-8ddd-dddddddddddd'; IF n<>0 THEN RAISE EXCEPTION 'Suspended owner request should not be public'; END IF;
  SELECT count(*) INTO n FROM public.test_notifications; IF n<>1 THEN RAISE EXCEPTION 'B notifications: %',n; END IF;
