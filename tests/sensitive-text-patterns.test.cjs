@@ -6,8 +6,10 @@ const containsSensitiveText = value => {
   const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text);
   const hasCpf = /(?:^|\D)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?:\D|$)/.test(text);
   const hasCep = /(?:^|\D)\d{5}-?\d{3}(?:\D|$)/.test(text);
-  const hasPhone = digits.length >= 10 && digits.length <= 13
-    && /(?:\+?55[\s().-]*)?(?:\(?\d{2}\)?[\s.-]*)?9?\d{4}[\s.-]*\d{4}/.test(text);
+  const phoneMatch = text.match(/(?:^|\D)((?:\+55[\s().-]*)?(?:\(?\d{2}\)?[\s.-]*)?(?:9\d{4}|[2-5]\d{3})[\s.-]?\d{4})(?:\D|$)/);
+  const phoneDigits = phoneMatch ? phoneMatch[1].replace(/\D/g, '') : '';
+  const hasPhone = phoneDigits.length >= 10 && phoneDigits.length <= 11
+    || Boolean(phoneMatch && /^\+55/.test(phoneMatch[1]) && phoneDigits.length >= 12 && phoneDigits.length <= 13);
   return hasEmail || hasCpf || hasCep || hasPhone;
 };
 
