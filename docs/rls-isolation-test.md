@@ -30,3 +30,9 @@ Limitação restante: o ambiente usa uma camada mínima compatível com `auth.ui
 
 ### Testes negativos de autorização
 A execução 9 do workflow de migrações passou após acrescentar verificações de que o papel `authenticated` não possui privilégios de UPDATE/DELETE em `public.requests` nem UPDATE em `public.notifications`: https://github.com/sommaapp/sommaapp.github.io/actions/runs/39485452832. A execução anterior havia falhado porque o próprio teste tentou executar UPDATE sem privilégio e o PostgreSQL corretamente retornou `permission denied`; o teste foi ajustado para validar os privilégios catalogados sem interromper a execução.
+
+
+### Regras negativas de contribuição
+A execução 15 do workflow de migrações validou identidade falsificada, autocontribuição, chave de idempotência duplicada, valor zero e valor acima da meta restante. Após isso, foram acrescentados dois casos adicionais para rejeitar contribuições destinadas a contas suspensas e pedidos expirados, mesmo quando o status persistido ainda aparece como `active`. Estes dois novos casos estão pendentes de CI no commit atual: [execução de migrações](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39493060903).
+
+As validações de concorrência permanecem limitadas ao comportamento transacional dos triggers e locks no PostgreSQL descartável; ainda não há teste multi-sessão de carga/concor­rência nem validação com o Supabase Auth/JWT completo.
