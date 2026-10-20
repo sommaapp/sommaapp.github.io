@@ -45,14 +45,14 @@ ALTER TABLE public.requests ENABLE TRIGGER requests_validate_insert;
 -- With the fix (FOR UPDATE), session B waits, then observes A's committed row.
 CREATE OR REPLACE FUNCTION private.test_pause_contribution()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
-AS $fn$
+AS \$fn$
 BEGIN
   IF NEW.request_id IN ('$REQ_A'::uuid, '$REQ_B'::uuid) THEN
     PERFORM pg_sleep(2);
   END IF;
   RETURN NEW;
 END
-$fn$;
+\$fn$;
 CREATE TRIGGER zz_test_pause_contribution
 BEFORE INSERT ON public.contributions
 FOR EACH ROW EXECUTE FUNCTION private.test_pause_contribution();
