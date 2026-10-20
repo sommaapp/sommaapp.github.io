@@ -117,5 +117,70 @@ BEGIN
   END IF;
 END $test$ LANGUAGE plpgsql;
 
+-- Negative business-rule regressions: identity spoofing, self-contribution,
+-- and duplicate idempotency keys must be rejected by the migrated triggers
+-- and constraints. Savepoint rollback keeps the fixture counts deterministic.
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
+SAVEPOINT contribution_negative_tests;
+
+DO $test$
+DECLARE
+  v_request uuid;
+  v_failed boolean := false;
+BEGIN
+  SELECT id INTO v_request FROM public.requests
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  BEGIN
+    INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
+    VALUES (v_request, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 100);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'contributor_mismatch' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'spoofed contributor identity was accepted'; END IF;
+
+  v_failed := false;
+  SELECT id INTO v_request FROM public.requests
+  WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  BEGIN
+    INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
+    VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100);
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'self_contribution_not_allowed' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'self-contribution was accepted'; END IF;
+END $test$ LANGUAGE plpgsql;
+
+-- Reuse a synthetic key to prove the unique idempotency constraint rejects
+-- duplicate submissions from the same contributor.
+INSERT INTO public.contributions
+  (request_id, contributor_user_id, amount_cents, idempotency_key)
+SELECT id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100,
+       '11111111-1111-4111-8111-111111111111'
+FROM public.requests
+WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+DO $test$
+DECLARE
+  v_request uuid;
+  v_failed boolean := false;
+BEGIN
+  SELECT id INTO v_request FROM public.requests
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  BEGIN
+    INSERT INTO public.contributions
+      (request_id, contributor_user_id, amount_cents, idempotency_key)
+    VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100,
+            '11111111-1111-4111-8111-111111111111');
+  EXCEPTION WHEN unique_violation THEN
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN RAISE EXCEPTION 'duplicate idempotency key was accepted'; END IF;
+END $test$ LANGUAGE plpgsql;
+
+ROLLBACK TO SAVEPOINT contribution_negative_tests;
 RESET ROLE;
 ROLLBACK;
