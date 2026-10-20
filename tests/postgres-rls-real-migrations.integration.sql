@@ -91,7 +91,7 @@ BEGIN
   WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   GET DIAGNOSTICS n = ROW_COUNT;
   IF n <> 0 THEN RAISE EXCEPTION 'Alpha updated Bravo notification'; END IF;
-END $;
+END $test$ LANGUAGE plpgsql;
 
 SELECT set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',false);
 DO $test$
@@ -127,7 +127,7 @@ BEGIN
   WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   GET DIAGNOSTICS n = ROW_COUNT;
   IF n <> 0 THEN RAISE EXCEPTION 'Bravo updated Alpha notification'; END IF;
-END $;
+END $test$ LANGUAGE plpgsql;
 
 RESET ROLE;
 ROLLBACK;
