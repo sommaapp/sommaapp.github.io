@@ -83,11 +83,11 @@ jobs:
             IF NOT has_function_privilege('authenticated', 'private.can_read_request(uuid)', 'EXECUTE') THEN
               RAISE EXCEPTION 'authenticated cannot execute private.can_read_request';
             END IF;
-          END $;
+          END $$;
 
           -- Every public application table must have RLS enabled; anonymous
           -- users must not receive direct table access to private app data.
-          DO $
+          DO $$
           DECLARE t record;
           BEGIN
             FOR t IN
@@ -126,7 +126,7 @@ jobs:
                OR has_function_privilege('authenticated', 'private.validate_contribution_insert()', 'EXECUTE') THEN
               RAISE EXCEPTION 'trigger-only contribution validator is directly executable';
             END IF;
-          END $;
+          END $$;
           SQL
       - name: Test two-user isolation against migrated schema
         run: docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-real-migrations.integration.sql
