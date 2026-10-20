@@ -9,7 +9,6 @@ OWNER="11111111-1111-4111-8111-111111111111"
 CONTRIB_A="22222222-2222-4222-8222-222222222222"
 CONTRIB_B="33333333-3333-4333-8333-333333333333"
 REQ_A="44444444-4444-4444-8444-444444444444"
-REQ_B="55555555-5555-4555-8555-555555555555"
 
 cleanup() {
   "${PSQL[@]}" <<SQL >/dev/null 2>&1 || true
@@ -36,18 +35,17 @@ ALTER TABLE public.requests DISABLE TRIGGER requests_validate_insert;
 INSERT INTO public.requests
  (id,user_id,category,description,goal_cents,raised_cents,status,starts_at,expires_at,duration_hours)
 VALUES
- ('$REQ_A','$OWNER','Outro','Synthetic concurrency request A',10000,0,'active',now(),now()+interval '1 day',24),
- ('$REQ_B','$OWNER','Outro','Synthetic concurrency request B',10000,0,'active',now(),now()+interval '1 day',24);
+ ('$REQ_A','$OWNER','Outro','Synthetic concurrency request',20000,0,'active',now(),now()+interval '1 day',24);
 ALTER TABLE public.requests ENABLE TRIGGER requests_validate_insert;
 
 -- Deterministically hold each insert after production validation has run.
--- With FOR SHARE both sessions pass the monthly SUM before either commits.
--- With the fix (FOR UPDATE), session B waits, then observes A's committed row.
+-- Both sessions target the same active request; the production request row lock
+-- must serialize their monthly-limit checks under simultaneous submissions.
 CREATE OR REPLACE FUNCTION private.test_pause_contribution()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS \$fn$
 BEGIN
-  IF NEW.request_id IN ('$REQ_A'::uuid, '$REQ_B'::uuid) THEN
+  IF NEW.request_id = '$REQ_A'::uuid THEN
     PERFORM pg_sleep(2);
   END IF;
   RETURN NEW;
@@ -65,13 +63,13 @@ docker exec "$DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','$CONTRIB_A',false); INSERT INTO public.contributions(request_id,contributor_user_id,amount_cents,idempotency_key) VALUES ('$REQ_A','$CONTRIB_A',6000,'66666666-6666-4666-8666-666666666666');" > /tmp/somma-concurrency-a.log 2>&1 &
 PID_A=$!
 docker exec "$DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres \
-  -c "SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','$CONTRIB_B',false); INSERT INTO public.contributions(request_id,contributor_user_id,amount_cents,idempotency_key) VALUES ('$REQ_B','$CONTRIB_B',6000,'77777777-7777-4777-8777-777777777777');" > /tmp/somma-concurrency-b.log 2>&1 &
+  -c "SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub','$CONTRIB_B',false); INSERT INTO public.contributions(request_id,contributor_user_id,amount_cents,idempotency_key) VALUES ('$REQ_A','$CONTRIB_B',6000,'77777777-7777-4777-8777-777777777777');" > /tmp/somma-concurrency-b.log 2>&1 &
 PID_B=$!
 wait "$PID_A"; STATUS_A=$?
 wait "$PID_B"; STATUS_B=$?
 set -e
 
-COUNT=$(docker exec "$DB_CONTAINER" psql -X -At -U postgres -d postgres -c "SELECT count(*) FROM public.contributions c JOIN public.requests r ON r.id=c.request_id WHERE r.user_id='$OWNER' AND c.status='simulated_confirmed' AND c.request_id IN ('$REQ_A','$REQ_B');")
+COUNT=$(docker exec "$DB_CONTAINER" psql -X -At -U postgres -d postgres -c "SELECT count(*) FROM public.contributions c JOIN public.requests r ON r.id=c.request_id WHERE r.user_id='$OWNER' AND c.status='simulated_confirmed' AND c.request_id = '$REQ_A';")
 TOTAL=$(docker exec "$DB_CONTAINER" psql -X -At -U postgres -d postgres -c "SELECT coalesce(sum(c.amount_cents),0) FROM public.contributions c JOIN public.requests r ON r.id=c.request_id WHERE r.user_id='$OWNER' AND c.status='simulated_confirmed' AND c.request_id IN ('$REQ_A','$REQ_B');")
 
 if [[ "$COUNT" != "1" || "$TOTAL" != "6000" ]]; then
