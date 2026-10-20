@@ -1,0 +1,78 @@
+name: Privacy guard tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'supabase/migrations/**'
+      - 'tests/sensitive-text-patterns.test.cjs'
+      - 'tests/postgres-sensitive-text.integration.sql'
+      - 'tests/frontend-logic.test.cjs'
+      - 'tests/frontend-browser.test.cjs'
+      - 'tooling/package.json'
+      - 'tooling/package-lock.json'
+      - '.github/workflows/privacy-guard-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  javascript-patterns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run synthetic privacy pattern tests
+        run: node tests/sensitive-text-patterns.test.cjs
+
+  frontend-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tooling/package-lock.json
+      - name: Install pinned frontend test dependencies
+        run: npm --prefix tooling ci
+      - name: Run frontend logic and API contract checks
+        run: npm --prefix tooling run test:logic
+      - name: Install Chromium
+        run: npm --prefix tooling exec -- playwright install --with-deps chromium
+      - name: Run browser regression checks
+        run: npm --prefix tooling run test:browser
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: somma_test
+          POSTGRES_PASSWORD: somma_test_only
+          POSTGRES_DB: somma_privacy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U somma_test -d somma_privacy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run migration integration tests on disposable PostgreSQL
+        env:
+          PGPASSWORD: somma_test_only
+        run: |
+          psql "host=localhost port=5432 dbname=somma_privacy_test user=somma_test" \
+            -v ON_ERROR_STOP=1 \
+            -f tests/postgres-sensitive-text.integration.sql
