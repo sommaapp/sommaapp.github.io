@@ -32,7 +32,7 @@
     const hasCpf = /(?:^|\D)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?:\D|$)/.test(text);
     const hasCep = /(?:^|\D)\d{5}-?\d{3}(?:\D|$)/.test(text);
     const hasPhone = digits.length >= 10 && digits.length <= 13
-      && /(?:\+?55[\s().-]*)?(?:\(?\d{2}\)?[\s.-]*)?9?\d{4}[\s.-]*\d{4}/.test(text);
+      && /(?:^|\D)(?:\+?55[\s().-]*)?(?:\(?\d{2}\)?[\s.-]*)?(?:9\d{4}|[2-5]\d{3})[\s.-]?\d{4}(?:\D|$)/.test(text);
     return hasEmail || hasCpf || hasCep || hasPhone;
   };
   const brl = cents => (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
