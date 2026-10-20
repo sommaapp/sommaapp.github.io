@@ -9,6 +9,8 @@ as $$
 declare
   v_text text;
   v_digits text;
+  v_phone text;
+  v_phone_digits text;
 begin
   if tg_table_name = 'requests' then
     v_text := coalesce(new.description, '');
@@ -19,14 +21,19 @@ begin
   end if;
 
   v_digits := regexp_replace(v_text, '[^0-9]', '', 'g');
+  v_phone := (regexp_match(
+    v_text,
+    '(^|[^0-9])((\+[ ]?55[ () .-]*)?([(]?[0-9]{2}[)]?[ .-]*)?(9[0-9]{4}|[2-5][0-9]{3})[ .-]?[0-9]{4})([^0-9]|$)'
+  ))[2];
+  v_phone_digits := regexp_replace(coalesce(v_phone, ''), '[^0-9]', '', 'g');
 
   if v_text ~* '[A-Z0-9._%+-]+@[A-Z0-9.-]+[.][A-Z]{2,}'
      or v_text ~ '(^|[^0-9])[0-9]{3}[.]?[0-9]{3}[.]?[0-9]{3}-?[0-9]{2}([^0-9]|$)'
      or v_text ~ '(^|[^0-9])[0-9]{5}-?[0-9]{3}([^0-9]|$)'
-     or (((length(v_digits) between 10 and 11)
-          or (length(v_digits) between 12 and 13 and v_text ~ '[+]55')
+     or (((length(v_phone_digits) between 10 and 11)
+          or (length(v_phone_digits) between 12 and 13 and v_phone ~ '^[+]55')
          )
-         and v_text ~ '(^|[^0-9])([+]55[ () .-]*)?([(]?[0-9]{2}[)]?[ .-]*)?(9[0-9]{4}|[2-5][0-9]{3})[ .-]?[0-9]{4}([^0-9]|$)') then
+         and v_phone is not null) then
     raise exception using
       errcode = '23514',
       message = 'sensitive_text_not_allowed',
