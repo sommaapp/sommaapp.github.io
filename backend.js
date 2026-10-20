@@ -86,13 +86,23 @@
     const now = new Date().toISOString();
     let query = client.from('requests').select(COLUMNS.requests)
       .eq('status', 'active')
-      .or(`expires_at.is.null,expires_at.gt.${now}`)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });
+    // Combine expiry and cursor filters into one PostgREST OR expression;
+    // separate .or() calls can change how filters are interpreted.
+    const expiryBranches = [`expires_at.is.null`, `expires_at.gt.${now}`];
+    const cursorBranches = cursor ? [
+      `created_at.lt.${cursor.created_at}`,
+      `and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+    ] : null;
     if (cursor) {
-      // Keyset pagination avoids growing OFFSET costs and keeps a deterministic
-      // tie-breaker when multiple requests share the same creation timestamp.
-      query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`);
+      const branches = [];
+      for (const expiry of expiryBranches) {
+        for (const position of cursorBranches) branches.push(`and(${expiry},${position})`);
+      }
+      query = query.or(branches.join(','));
+    } else {
+      query = query.or(expiryBranches.join(','));
     }
     const rows = await unwrap(query.limit(limit + 1));
     const hasMore = rows.length > limit;
