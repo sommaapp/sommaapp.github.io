@@ -17,7 +17,7 @@ ALTER TABLE public.test_notifications ENABLE ROW LEVEL SECURITY;
 CREATE POLICY profiles_read_own ON public.test_profiles FOR SELECT TO authenticated USING ((SELECT auth.uid()) = id);
 CREATE FUNCTION private.test_can_read_request(p_request_id uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
-AS $
+AS $$
   SELECT (SELECT auth.uid()) IS NOT NULL AND EXISTS (
     SELECT 1 FROM public.test_requests r
     JOIN public.test_profiles owner_profile ON owner_profile.id = r.user_id
@@ -34,7 +34,7 @@ AS $
       )
     )
   );
-$;
+$$;
 GRANT USAGE ON SCHEMA private TO authenticated;
 GRANT EXECUTE ON FUNCTION private.test_can_read_request(uuid) TO authenticated;
 CREATE POLICY requests_read ON public.test_requests FOR SELECT TO authenticated
