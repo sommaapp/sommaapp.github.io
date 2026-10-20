@@ -23,6 +23,16 @@
   };
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  // Prevent common personal identifiers from being published in public-facing text.
+  // Server-side constraints in the companion migration remain the authoritative guard.
+  const containsSensitiveText = value => {
+    const text = String(value ?? '');
+    const digits = text.replace(/\\D/g, '');
+    return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i.test(text)
+      || /\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b/.test(text)
+      || /\\b\\d{5}-?\\d{3}\\b/.test(text)
+      || (digits.length >= 10 && digits.length <= 13 && /(?:\\+?55[\\s().-]*)?(?:\\(?\\d{2}\\)?[\\s.-]*)?9?\\d{4}[\\s.-]*\\d{4}/.test(text));
+  };
   const brl = cents => (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const firstName = name => String(name || '').trim().split(/\s+/)[0] || 'Membro';
   const feeFor = cents => cents > 0 ? 20 + Math.ceil(cents / 20) : 0;
@@ -748,6 +758,7 @@
     } else if (form.id === 'request-step-2') {
       const description = $('#req-description').value.trim();
       if (!description) { feedback('#request-feedback', 'Descreva sua necessidade.'); return; }
+      if (containsSensitiveText(description)) { feedback('#request-feedback', 'Remova e-mail, telefone, CPF ou CEP da descrição para proteger sua privacidade.'); return; }
       state.draft.description = description;
       state.draft.durationHours = Number($('#req-time').value);
       state.requestStep = 3;
