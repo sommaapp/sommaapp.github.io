@@ -58,6 +58,7 @@ BEGIN
       'Documento 123.456.789-00',
       'CEP 12345-678',
       'Telefone (11) 91234-5678',
+      'Telefone +55 11 91234-5678',
       'Preciso até 20/10/2026; telefone (11) 91234-5678'
     ] LOOP
       BEGIN
