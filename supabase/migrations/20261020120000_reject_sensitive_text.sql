@@ -23,8 +23,10 @@ begin
   if v_text ~* '[A-Z0-9._%+-]+@[A-Z0-9.-]+[.][A-Z]{2,}'
      or v_text ~ '(^|[^0-9])[0-9]{3}[.]?[0-9]{3}[.]?[0-9]{3}-?[0-9]{2}([^0-9]|$)'
      or v_text ~ '(^|[^0-9])[0-9]{5}-?[0-9]{3}([^0-9]|$)'
-     or (length(v_digits) between 10 and 13
-         and v_text ~ '(^|[^0-9])([+]?[ ]?55[ () .-]*)?([(]?[0-9]{2}[)]?[ .-]*)?(9[0-9]{4}|[2-5][0-9]{3})[ .-]?[0-9]{4}([^0-9]|$)') then
+     or (((length(v_digits) between 10 and 11)
+          or (length(v_digits) between 12 and 13 and v_text ~ '[+]55')
+         )
+         and v_text ~ '(^|[^0-9])([+]55[ () .-]*)?([(]?[0-9]{2}[)]?[ .-]*)?(9[0-9]{4}|[2-5][0-9]{3})[ .-]?[0-9]{4}([^0-9]|$)') then
     raise exception using
       errcode = '23514',
       message = 'sensitive_text_not_allowed',
