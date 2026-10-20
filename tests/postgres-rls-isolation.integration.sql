@@ -36,7 +36,7 @@ SELECT set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 DO $$ DECLARE n integer; BEGIN
  SELECT count(*) INTO n FROM public.test_profiles; IF n<>1 THEN RAISE EXCEPTION 'B profile isolation: %',n; END IF;
  SELECT count(*) INTO n FROM public.test_requests; IF n<>1 THEN RAISE EXCEPTION 'B request isolation: %',n; END IF;
- SELECT count(*) INTO n FROM public.test_contributions; IF n<>2 THEN RAISE EXCEPTION 'B related contributions: %',n; END IF;
+ SELECT count(*) INTO n FROM public.test_contributions; IF n<>3 THEN RAISE EXCEPTION 'B related contributions: %',n; END IF;
  SELECT count(*) INTO n FROM public.test_notifications; IF n<>1 THEN RAISE EXCEPTION 'B notifications: %',n; END IF;
 END $$;
 UPDATE public.test_notifications SET read_at=now() WHERE id='77777777-bbbb-4bbb-8bbb-777777777777';
