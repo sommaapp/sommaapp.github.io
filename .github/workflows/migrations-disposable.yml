@@ -83,7 +83,50 @@ jobs:
             IF NOT has_function_privilege('authenticated', 'private.can_read_request(uuid)', 'EXECUTE') THEN
               RAISE EXCEPTION 'authenticated cannot execute private.can_read_request';
             END IF;
-          END $$;
+          END $;
+
+          -- Every public application table must have RLS enabled; anonymous
+          -- users must not receive direct table access to private app data.
+          DO $
+          DECLARE t record;
+          BEGIN
+            FOR t IN
+              SELECT c.relname, c.relrowsecurity
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'r'
+            LOOP
+              IF NOT t.relrowsecurity THEN
+                RAISE EXCEPTION 'RLS is disabled on public.%', t.relname;
+              END IF;
+              IF has_table_privilege('anon', format('public.%I', t.relname), 'SELECT') THEN
+                RAISE EXCEPTION 'anon has table SELECT on public.%', t.relname;
+              END IF;
+            END LOOP;
+
+            IF has_table_privilege('authenticated', 'public.profiles', 'UPDATE') THEN
+              RAISE EXCEPTION 'authenticated has unexpected table-level UPDATE on profiles';
+            END IF;
+            IF has_table_privilege('authenticated', 'public.contributions', 'UPDATE')
+               OR has_table_privilege('authenticated', 'public.contributions', 'DELETE') THEN
+              RAISE EXCEPTION 'authenticated has unexpected contribution write privileges';
+            END IF;
+            IF has_column_privilege('authenticated', 'public.profiles', 'account_status', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.profiles', 'level', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.profiles', 'request_limit_cents', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.profiles', 'period_limit_cents', 'UPDATE') THEN
+              RAISE EXCEPTION 'authenticated can update protected profile fields';
+            END IF;
+            IF has_column_privilege('authenticated', 'public.notifications', 'body', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.notifications', 'user_id', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.notifications', 'title', 'UPDATE') THEN
+              RAISE EXCEPTION 'authenticated can modify protected notification fields';
+            END IF;
+            IF has_function_privilege('anon', 'private.validate_contribution_insert()', 'EXECUTE')
+               OR has_function_privilege('authenticated', 'private.validate_contribution_insert()', 'EXECUTE') THEN
+              RAISE EXCEPTION 'trigger-only contribution validator is directly executable';
+            END IF;
+          END $;
           SQL
       - name: Test two-user isolation against migrated schema
         run: docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-real-migrations.integration.sql
