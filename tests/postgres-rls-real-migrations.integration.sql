@@ -180,8 +180,7 @@ BEGIN
 
   -- An active request owned by a suspended account must not accept support.
   v_failed := false;
-  SELECT id INTO v_request FROM public.requests
-  WHERE user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  v_request := 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
   BEGIN
     INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
     VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100);
@@ -194,8 +193,7 @@ BEGIN
   -- An expired request must reject new contributions even if its status field
   -- still says active (the expiration timestamp is authoritative).
   v_failed := false;
-  SELECT id INTO v_request FROM public.requests
-  WHERE user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  v_request := 'ffffffff-ffff-4fff-8fff-ffffffffffff';
   BEGIN
     INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
     VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100);
