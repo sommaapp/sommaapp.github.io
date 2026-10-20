@@ -12,6 +12,15 @@ Documento de planejamento. Esta branch não altera o comportamento do aplicativo
 - `app.js`: a atualização automática verifica a cada 15 segundos se os dados estão desatualizados; em geral, inicia recarga quando o último carregamento tem pelo menos 60 segundos. Retornar à aba pode antecipar a recarga.
 - Portanto, o volume lido por sessão tende a crescer com a base. Ainda não há benchmark que quantifique o limite real de usuários.
 
+## Restrições de segurança confirmadas (RLS)
+
+- `requests`: leitura de pedidos próprios ou autorizados por `private.can_read_request(id)`; inserção vinculada a `auth.uid()`.
+- `contributions`: leitura de contribuições próprias ou associadas a pedido do qual o usuário é titular; inserção vinculada a `auth.uid()`.
+- `profiles`: leitura do próprio perfil; `public_profiles` expõe apenas os campos públicos definidos no esquema.
+- `notifications`: leitura e atualização restritas ao próprio usuário.
+- Consequência para o redesenho: consultas por página devem continuar usando a sessão autenticada e RLS. Não substituir esses filtros por uma chave administrativa no navegador nem tornar tabelas públicas para facilitar o feed.
+- Resumos no servidor precisam manter a semântica de titularidade e contribuição, além dos estados válidos; não basta somar indiscriminadamente a tabela inteira.
+
 ## Proposta de arquitetura em etapas
 
 ### 1. Feed paginado de pedidos
@@ -27,6 +36,7 @@ Documento de planejamento. Esta branch não altera o comportamento do aplicativo
 - Para limites mensais, usar agregação no servidor com a mesma regra temporal UTC e os mesmos estados atualmente considerados.
 - Não confiar em totais calculados exclusivamente no navegador para impor regras de negócio. Qualquer limite que proteja publicação/contribuição deve ser validado no banco.
 - Tratar resposta perdida após escrita com idempotência, sem varrer toda a tabela para tentar descobrir se o pedido foi criado.
+- Antes de uma RPC, documentar os papéis que podem executá-la, validar `auth.uid()` dentro da função e restringir `EXECUTE`; qualquer função `SECURITY DEFINER` deve usar `search_path` seguro e ser revisada separadamente.
 
 ### 3. Histórico e notificações
 
