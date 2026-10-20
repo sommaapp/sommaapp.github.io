@@ -45,7 +45,8 @@ BEGIN
     ('Preciso de ajuda para transporte até o trabalho.'),
     ('Meta de R$ 1.200,00 para transporte'),
     ('Preciso até 20/10/2026'),
-    ('Protocolo interno 202610201200');
+    ('Protocolo interno 202610201200'),
+    ('Referência local 912345678');
   INSERT INTO public.reports(reason) VALUES
     ('Relato de teste sem dados pessoais.'),
     ('O valor era R$ 1.200,00 em 20/10/2026');
