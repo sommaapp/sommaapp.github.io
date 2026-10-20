@@ -175,7 +175,7 @@ declare
   v_request_limit integer;
   v_period_limit integer;
 begin
-  v_full_name := coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), '');
+  v_full_name := coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), 'Membro');
   v_public_name := private.abbreviate_public_name(v_full_name);
 
   select request_limit_cents, period_limit_cents
