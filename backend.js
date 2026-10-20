@@ -60,6 +60,61 @@
     }
   }
 
+  const REQUEST_PAGE_DEFAULT = 20;
+  const REQUEST_PAGE_MAX = 50;
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  function normalizeRequestPageOptions(options = {}) {
+    const requestedLimit = Number(options.limit ?? REQUEST_PAGE_DEFAULT);
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.max(1, Math.min(REQUEST_PAGE_MAX, requestedLimit))
+      : REQUEST_PAGE_DEFAULT;
+    const cursor = options.cursor ?? null;
+    if (cursor === null) return { limit, cursor: null };
+    if (!cursor || typeof cursor !== 'object'
+      || typeof cursor.created_at !== 'string'
+      || !Number.isFinite(Date.parse(cursor.created_at))
+      || typeof cursor.id !== 'string'
+      || !UUID_PATTERN.test(cursor.id)) {
+      throw new TypeError('invalid_request_page_cursor');
+    }
+    return { limit, cursor: { created_at: new Date(cursor.created_at).toISOString(), id: cursor.id } };
+  }
+
+  async function requestPage(options = {}) {
+    const { limit, cursor } = normalizeRequestPageOptions(options);
+    const now = new Date().toISOString();
+    let query = client.from('requests').select(COLUMNS.requests)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+    // Combine expiry and cursor filters into one PostgREST OR expression;
+    // separate .or() calls can change how filters are interpreted.
+    const expiryBranches = [`expires_at.is.null`, `expires_at.gt.${now}`];
+    const cursorBranches = cursor ? [
+      `created_at.lt.${cursor.created_at}`,
+      `and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+    ] : null;
+    if (cursor) {
+      const branches = [];
+      for (const expiry of expiryBranches) {
+        for (const position of cursorBranches) branches.push(`and(${expiry},${position})`);
+      }
+      query = query.or(branches.join(','));
+    } else {
+      query = query.or(expiryBranches.join(','));
+    }
+    const rows = await unwrap(query.limit(limit + 1));
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const last = items.at(-1);
+    return {
+      items,
+      hasMore,
+      nextCursor: hasMore && last ? { created_at: last.created_at, id: last.id } : null
+    };
+  }
+
   async function publicProfiles(ids) {
     const unique = [...new Set(ids.filter(Boolean))];
     const chunks = [];
@@ -122,6 +177,7 @@
   window.SommaBackend = Object.freeze({
     client,
     snapshot,
+    requestPage,
     findContribution,
     contribute,
     createRequest: values => unwrap(client.from('requests').insert({

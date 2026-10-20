@@ -1,0 +1,24 @@
+name: Request pagination tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend.js'
+      - 'tests/backend-pagination.test.cjs'
+      - '.github/workflows/request-pagination-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  request-pagination:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test keyset pagination contract with a mocked API
+        run: node tests/backend-pagination.test.cjs
