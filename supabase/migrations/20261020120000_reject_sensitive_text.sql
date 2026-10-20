@@ -8,7 +8,6 @@ set search_path = ''
 as $$
 declare
   v_text text;
-  v_digits text;
   v_phone text;
   v_phone_digits text;
 begin
@@ -20,7 +19,6 @@ begin
     return new;
   end if;
 
-  v_digits := regexp_replace(v_text, '[^0-9]', '', 'g');
   v_phone := (regexp_match(
     v_text,
     '(^|[^0-9])((\+[ ]?55[ () .-]*)?([(]?[0-9]{2}[)]?[ .-]*)?(9[0-9]{4}|[2-5][0-9]{3})[ .-]?[0-9]{4})([^0-9]|$)'
