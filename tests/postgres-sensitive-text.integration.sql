@@ -44,7 +44,8 @@ BEGIN
   INSERT INTO public.requests(description) VALUES
     ('Preciso de ajuda para transporte até o trabalho.'),
     ('Meta de R$ 1.200,00 para transporte'),
-    ('Preciso até 20/10/2026');
+    ('Preciso até 20/10/2026'),
+    ('Protocolo interno 202610201200');
   INSERT INTO public.reports(reason) VALUES
     ('Relato de teste sem dados pessoais.'),
     ('O valor era R$ 1.200,00 em 20/10/2026');
@@ -56,7 +57,8 @@ BEGIN
       'Contato teste@example.invalid',
       'Documento 123.456.789-00',
       'CEP 12345-678',
-      'Telefone (11) 91234-5678'
+      'Telefone (11) 91234-5678',
+      'Preciso até 20/10/2026; telefone (11) 91234-5678'
     ] LOOP
       BEGIN
         IF v_table = 'requests' THEN
