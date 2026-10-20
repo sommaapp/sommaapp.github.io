@@ -8,6 +8,10 @@ on:
       - 'supabase/migrations/**'
       - 'tests/sensitive-text-patterns.test.cjs'
       - 'tests/postgres-sensitive-text.integration.sql'
+      - 'tests/frontend-logic.test.cjs'
+      - 'tests/frontend-browser.test.cjs'
+      - 'tooling/package.json'
+      - 'tooling/package-lock.json'
       - '.github/workflows/privacy-guard-tests.yml'
   workflow_dispatch:
 
@@ -24,6 +28,24 @@ jobs:
           node-version: 22
       - name: Run synthetic privacy pattern tests
         run: node tests/sensitive-text-patterns.test.cjs
+
+  frontend-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tooling/package-lock.json
+      - name: Install pinned frontend test dependencies
+        run: npm --prefix tooling ci
+      - name: Run frontend logic and API contract checks
+        run: npm --prefix tooling run test:logic
+      - name: Install Chromium
+        run: npm --prefix tooling exec -- playwright install --with-deps chromium
+      - name: Run browser regression checks
+        run: npm --prefix tooling run test:browser
 
   postgres-integration:
     runs-on: ubuntu-latest
