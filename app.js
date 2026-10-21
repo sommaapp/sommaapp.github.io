@@ -289,7 +289,7 @@
     if (!state.data?.notificationsHasMore || state.loading) return;
     state.loading = true; updateSync();
     try {
-      const page = await backend.notificationPage(state.data.notificationsCursor);
+      const page = await backend.notificationPage(state.session.user.id, state.data.notificationsCursor);
       const known = new Set(state.data.notifications.map(item => item.id));
       state.data.notifications.push(...page.rows.filter(item => !known.has(item.id)));
       state.data.notificationsHasMore = page.hasMore; state.data.notificationsCursor = page.nextCursor;
