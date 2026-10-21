@@ -119,6 +119,8 @@ SET full_name = 'Alpha Updated'
 WHERE id = auth.uid();
 
 DO $profile_update$
+DECLARE
+  v_public_name_update_denied boolean := false;
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles
@@ -131,6 +133,17 @@ BEGIN
     WHERE id = auth.uid() AND public_name = 'Alpha U.'
   ) THEN
     RAISE EXCEPTION 'public profile name did not synchronize after full_name update';
+  END IF;
+
+  BEGIN
+    UPDATE public.profiles
+    SET public_name = 'Synthetic Forged Name'
+    WHERE id = auth.uid();
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_public_name_update_denied := true;
+  END;
+  IF NOT v_public_name_update_denied THEN
+    RAISE EXCEPTION 'authenticated user can bypass public_name derivation';
   END IF;
 END $profile_update$;
 
