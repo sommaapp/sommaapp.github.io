@@ -55,7 +55,7 @@ async function main(){
    const received=db.contributions.filter(c=>ownIds.has(c.request_id)&&c.status==='simulated_confirmed');
    const monthStart=Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),1);
    const latest=db.requests.filter(r=>r.user_id===uid).reduce((n,r)=>Math.max(n,Date.parse(r.created_at)),0);
-   return respond({helped:new Set(given.map(c=>db.requests.find(r=>r.id===c.request_id)?.user_id).filter(Boolean)).size,contributed_cents:given.reduce((n,c)=>n+c.amount_cents,0),received_count:received.length,received_month_cents:received.filter(c=>Date.parse(c.created_at)>=monthStart).reduce((n,c)=>n+c.amount_cents,0),next_request_at:latest?new Date(latest+7*86400000).toISOString():null});
+   return respond({supported_requests:new Set(given.map(c=>c.request_id)).size,helped:new Set(given.map(c=>db.requests.find(r=>r.id===c.request_id)?.user_id).filter(Boolean)).size,contributed_cents:given.reduce((n,c)=>n+c.amount_cents,0),received_count:received.length,received_month_cents:received.filter(c=>Date.parse(c.created_at)>=monthStart).reduce((n,c)=>n+c.amount_cents,0),next_request_at:latest?new Date(latest+7*86400000).toISOString():null});
   }
   if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_history_page') {
    const events=[];
