@@ -66,11 +66,25 @@ AS $$
     FROM active r
     ORDER BY (r.goal_cents - r.raised_cents), r.created_at DESC, r.id DESC
     LIMIT 1
+  ),
+  latest AS (
+    SELECT r.id
+    FROM active r
+    ORDER BY r.created_at DESC, r.id DESC
+    LIMIT 1
+  ),
+  almost AS (
+    SELECT to_jsonb(r) AS request
+    FROM active r
+    WHERE r.id <> (SELECT id FROM latest)
+    ORDER BY (r.goal_cents - r.raised_cents), r.created_at DESC, r.id DESC
+    LIMIT 1
   )
   SELECT jsonb_build_object(
     'active_count', (SELECT count(*) FROM active),
     'completed_count', (SELECT count(*) FROM public.requests WHERE status = 'completed'),
-    'closest', (SELECT request FROM closest)
+    'closest', (SELECT request FROM closest),
+    'almost', (SELECT request FROM almost)
   )
 $$;
 
