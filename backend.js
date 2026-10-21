@@ -72,12 +72,12 @@
   }
 
   async function notificationPage(cursor = null) {
-    let query = afterCursor(client.from('notifications').select(COLUMNS.notifications, { count: 'exact' }), cursor)
+    let query = afterCursor(client.from('notifications').select(COLUMNS.notifications), cursor)
       .order('created_at', { ascending: false }).order('id', { ascending: false });
     const result = await query.range(0, PAGE_SIZE - 1);
     if (result.error) throw result.error;
     const rows = result.data || [], last = rows[rows.length - 1];
-    return { rows, total: result.count || 0, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
+    return { rows, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
   }
 
   async function historyPage(kind = 'all', cursor = null) {
@@ -112,7 +112,7 @@
     return {
       profile, levels, requests, activeOwn, feedSummary: feedSummary || { active_count: 0, closest: null },
       metrics: metrics || {}, feedHasMore: requestsPage.hasMore, feedCursor: requestsPage.nextCursor,
-      notifications: notificationsPage.rows, notificationsTotal: notificationsPage.total,
+      notifications: notificationsPage.rows,
       notificationsHasMore: notificationsPage.hasMore, notificationsCursor: notificationsPage.nextCursor,
       unreadCount: unreadResult.count || 0, history: null, publicProfiles: profiles
     };
