@@ -112,6 +112,28 @@ BEGIN
   END IF;
 END $test$ LANGUAGE plpgsql;
 
+-- An authenticated user may update their own full_name; the database trigger
+-- must keep the public profile projection synchronized.
+UPDATE public.profiles
+SET full_name = 'Alpha Updated'
+WHERE id = auth.uid();
+
+DO $profile_update$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND full_name = 'Alpha Updated'
+  ) THEN
+    RAISE EXCEPTION 'authenticated user could not update own full_name';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.public_profiles
+    WHERE id = auth.uid() AND public_name = 'Alpha U.'
+  ) THEN
+    RAISE EXCEPTION 'public profile name did not synchronize after full_name update';
+  END IF;
+END $profile_update$;
+
 SELECT set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',false);
 DO $test$
 DECLARE n integer;
@@ -229,6 +251,66 @@ BEGIN
   END;
   IF NOT v_failed THEN RAISE EXCEPTION 'contribution to expired request was accepted'; END IF;
 END $test$ LANGUAGE plpgsql;
+
+-- Report insertion must bind the reporter to auth.uid(), accept only
+-- visible targets, trim user text, and force the initial status.
+INSERT INTO public.reports (reporter_user_id, target_type, target_id, reason, status)
+VALUES (
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'profile',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  '  Synthetic profile report  ',
+  'resolved'
+);
+
+DO $report_tests$
+DECLARE
+  v_failed boolean := false;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.reports
+    WHERE reporter_user_id = auth.uid()
+      AND target_type = 'profile'
+      AND target_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      AND reason = 'Synthetic profile report'
+      AND status = 'open'
+  ) THEN
+    RAISE EXCEPTION 'valid profile report was not normalized and opened';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.reports (reporter_user_id, target_type, target_id, reason)
+    VALUES (
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'profile',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'Synthetic spoofed report'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'reporter_mismatch' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN
+    RAISE EXCEPTION 'report with a forged reporter identity was accepted';
+  END IF;
+
+  v_failed := false;
+  BEGIN
+    INSERT INTO public.reports (reporter_user_id, target_type, target_id, reason)
+    VALUES (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'request',
+      'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      'Synthetic hidden request report'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'report_target_not_found' THEN RAISE; END IF;
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN
+    RAISE EXCEPTION 'report against an unreadable expired request was accepted';
+  END IF;
+END $report_tests$;
 
 -- Reuse a synthetic key to prove the unique idempotency constraint rejects
 -- duplicate submissions from the same contributor.
