@@ -254,7 +254,8 @@
       });
       (await backend.publicProfiles(rows.flatMap(item => [item.person_id, item.request?.user_id, item.contribution?.contributor_user_id]).filter(Boolean)))
         .forEach(profile => state.publicProfiles.set(profile.id, profile));
-      state.history.cursor = page.next_at && page.next_id ? { at: page.next_at, id: page.next_id } : null;
+      state.history.cursor = page.next_at && page.next_id && page.next_kind
+        ? { at: page.next_at, id: page.next_id, kind: page.next_kind } : null;
       state.history.hasMore = Boolean(page.has_more);
       state.history.loaded = true;
     } catch (error) {
