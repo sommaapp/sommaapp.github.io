@@ -73,7 +73,7 @@ async function main(){
   }
   if (method === 'HEAD' && table === 'notifications') {
    const unread=db.notifications.filter(n=>n.user_id===uid&&n.read_at==null).length;
-   return route.fulfill({status:200,headers:{...headers,'content-range':`0-0/${unread}`},body:''});
+   return route.fulfill({status:200,headers:{...headers,'content-range':`*/${unread}`},body:''});
   }
   if(!db[table])return respond({code:'42P01',message:'Unknown table'},400);
   if(method==='GET'){
