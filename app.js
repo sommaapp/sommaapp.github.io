@@ -483,10 +483,10 @@
     const primary = active[0] || state.data.feedSummary.closest;
     const almost = state.data.feedSummary.almost || null;
     const activeCount = Number(state.data.feedSummary.active_count || 0);
-    const completed = Number(state.data.feedSummary.completed_count || 0);
+    const supportedRequests = Number(state.data.metrics.supported_requests || 0);
     app.innerHTML = `<div class="content">
       <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(firstName(user.full_name))}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
-      <div class="stats"><div class="stat"><strong>${activeCount}</strong><span>pedidos ativos</span></div><div class="stat"><strong>${completed}</strong><span>metas concluídas com você</span></div><div class="stat stat-money"><strong>${brl(100).replace(/\s/, ' ')}</strong><span>para começar</span></div></div>
+      <div class="stats"><div class="stat"><strong>${activeCount}</strong><span>pedidos ativos</span></div><div class="stat"><strong>${supportedRequests}</strong><span>pedidos apoiados</span></div><div class="stat stat-money"><strong>${brl(100).replace(/\s/, ' ')}</strong><span>para começar</span></div></div>
       <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
       <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-view="help">Ver todos</button></div>
       ${primary ? requestCard(primary) : '<section class="empty-state"><div class="empty-icon">♡</div><h2>A comunidade começa com pessoas</h2><p>Ainda não há pedidos ativos. Os novos pedidos aparecerão aqui.</p><button type="button" class="btn btn-primary full" data-view="request">Pedir apoio</button></section>'}
