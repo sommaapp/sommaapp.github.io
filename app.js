@@ -29,7 +29,7 @@
   const fullDate = value => value ? new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
   const joinedDate = value => value ? new Date(value).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : '—';
   const currentUser = () => state.data?.profile;
-  const requestById = id => state.data?.requests.find(request => request.id === id) || (state.data?.activeOwn?.id === id ? state.data.activeOwn : null) || (state.data?.feedSummary?.closest?.id === id ? state.data.feedSummary.closest : null) || state.history.items.find(item => item.request?.id === id)?.request || null;
+  const requestById = id => state.data?.requests.find(request => request.id === id) || (state.data?.activeOwn?.id === id ? state.data.activeOwn : null) || (state.data?.feedSummary?.closest?.id === id ? state.data.feedSummary.closest : null) || (state.data?.feedSummary?.almost?.id === id ? state.data.feedSummary.almost : null) || state.history.items.find(item => item.request?.id === id)?.request || null;
   const personName = id => state.publicProfiles.get(id)?.public_name || 'Membro Somma';
   const levelName = code => state.data?.levels.find(level => level.code === code)?.display_name || 'Em análise';
   const hasSession = () => Boolean(state.session?.user?.id);
