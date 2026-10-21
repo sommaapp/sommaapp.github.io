@@ -51,7 +51,7 @@ Esta integração espera as migrações do Backend v1, incluindo o endurecimento
 | `requests` | Pedidos visíveis à conta e publicação | `user_id`, `category`, `description`, `goal_cents`, `duration_hours` |
 | `contributions` | Apoios enviados/recebidos e registro de simulação | `request_id`, `contributor_user_id`, `amount_cents`, `idempotency_key` |
 | `notifications` | Avisos da própria conta, paginação e marcação como lidos | `read_at` |
-| `somma_user_summary()` | Métricas agregadas da própria conta | Sem mutação |
+| `somma_user_summary()` | Métricas agregadas da própria conta, incluindo pedidos distintos apoiados sem depender da visibilidade do pedido concluído via RLS | Sem mutação |
 | `somma_feed_summary()` | Contagem e destaques limitados de pedidos ativos de outras contas | Sem mutação |
 | `somma_history_page(kind, before_at, before_id, limit, before_kind)` | Página do histórico com cursor por data, UUID e tipo de evento | Sem mutação |
 
