@@ -85,6 +85,30 @@ VALUES
    5000,0,'active',now()-interval '2 days',now()-interval '1 day',24);
 ALTER TABLE public.requests ENABLE TRIGGER requests_validate_insert;
 
+-- Cross-table UUIDs are not constrained to be globally unique. Create a
+-- deliberate timestamp/UUID tie so keyset paging must use the event kind too.
+ALTER TABLE public.requests DISABLE TRIGGER USER;
+INSERT INTO public.requests
+  (id, user_id, category, description, goal_cents, raised_cents, status,
+   starts_at, expires_at, created_at, updated_at, duration_hours)
+VALUES
+  ('12121212-1212-4121-8121-121212121212',
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Outro', 'Synthetic cursor collision request',
+   2000, 0, 'completed', '2000-01-01 UTC', '2000-01-02 UTC',
+   '2000-01-01 UTC', '2000-01-01 UTC', 24);
+ALTER TABLE public.requests ENABLE TRIGGER USER;
+ALTER TABLE public.contributions DISABLE TRIGGER USER;
+INSERT INTO public.contributions
+  (id, request_id, contributor_user_id, amount_cents, platform_fee_cents,
+   status, created_at, idempotency_key)
+SELECT '12121212-1212-4121-8121-121212121212', id,
+       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 200, 30,
+       'simulated_confirmed', '2000-01-01 UTC',
+       '13131313-1313-4131-8131-131313131313'
+FROM public.requests
+WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ALTER TABLE public.contributions ENABLE TRIGGER USER;
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
 DO $bounded_read_tests$
@@ -92,10 +116,11 @@ DECLARE
   v_summary jsonb;
   v_feed jsonb;
   v_history jsonb;
+  v_collision_kind text;
 BEGIN
   v_summary := public.somma_user_summary();
   IF (v_summary->>'helped')::integer <> 1
-     OR (v_summary->>'contributed_cents')::integer <> 1000
+     OR (v_summary->>'contributed_cents')::integer <> 1200
      OR (v_summary->>'received_count')::integer <> 1
      OR (v_summary->>'received_month_cents')::integer <> 1000
      OR v_summary->>'next_request_at' IS NULL THEN
@@ -112,17 +137,29 @@ BEGIN
     RAISE EXCEPTION 'feed summary exposed a column outside its explicit projection: %', v_feed;
   END IF;
 
-  v_history := public.somma_history_page('all', NULL, NULL, 2);
-  IF jsonb_array_length(v_history->'items') <> 2
+  v_history := public.somma_history_page('all', NULL, NULL, 4);
+  IF jsonb_array_length(v_history->'items') <> 4
      OR NOT (v_history->>'has_more')::boolean THEN
     RAISE EXCEPTION 'history first cursor page is incorrect: %', v_history;
   END IF;
+  IF (
+    SELECT count(*) FROM jsonb_array_elements(v_history->'items') AS entries(item)
+    WHERE item->>'event_id' = '12121212-1212-4121-8121-121212121212'
+  ) <> 1 THEN
+    RAISE EXCEPTION 'synthetic cross-table tie did not land on the page boundary: %', v_history;
+  END IF;
+  SELECT item->>'kind' INTO v_collision_kind
+  FROM jsonb_array_elements(v_history->'items') AS entries(item)
+  WHERE item->>'event_id' = '12121212-1212-4121-8121-121212121212';
   v_history := public.somma_history_page(
-    'all', (v_history->>'next_at')::timestamptz, (v_history->>'next_id')::uuid, 2
+    'all', (v_history->>'next_at')::timestamptz,
+    (v_history->>'next_id')::uuid, 4, v_history->>'next_kind'
   );
   IF jsonb_array_length(v_history->'items') <> 1
-     OR (v_history->>'has_more')::boolean THEN
-    RAISE EXCEPTION 'history second cursor page duplicated or skipped synthetic events: %', v_history;
+     OR (v_history->>'has_more')::boolean
+     OR v_history->'items'->0->>'event_id' <> '12121212-1212-4121-8121-121212121212'
+     OR v_history->'items'->0->>'kind' = v_collision_kind THEN
+    RAISE EXCEPTION 'history cursor skipped or duplicated a tied event: %', v_history;
   END IF;
 
   IF EXISTS (
@@ -158,15 +195,15 @@ BEGIN
   END IF;
   IF has_function_privilege('anon', 'public.somma_user_summary()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.somma_feed_summary()', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.somma_history_page(text,timestamptz,uuid,integer,text)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.somma_user_summary()', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.somma_feed_summary()', 'EXECUTE')
-     OR has_function_privilege('service_role', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE') THEN
+     OR has_function_privilege('service_role', 'public.somma_history_page(text,timestamptz,uuid,integer,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'unauthorized role can execute a bounded client read function';
   END IF;
   IF NOT has_function_privilege('authenticated', 'public.somma_user_summary()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.somma_feed_summary()', 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE') THEN
+     OR NOT has_function_privilege('authenticated', 'public.somma_history_page(text,timestamptz,uuid,integer,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'authenticated is missing execute on a bounded client read function';
   END IF;
 END $bounded_read_tests$;
@@ -178,10 +215,10 @@ BEGIN
   IF n <> 1 THEN RAISE EXCEPTION 'Alpha profile isolation failed: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests;
-  IF n <> 2 THEN RAISE EXCEPTION 'Alpha should see own and Bravo active requests only: %', n; END IF;
+  IF n <> 3 THEN RAISE EXCEPTION 'Alpha should see own requests and Bravo active request only: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.contributions;
-  IF n <> 2 THEN RAISE EXCEPTION 'Alpha should see own and own-request contributions only: %', n; END IF;
+  IF n <> 3 THEN RAISE EXCEPTION 'Alpha should see own and own-request contributions only: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests
   WHERE id IN ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','ffffffff-ffff-4fff-8fff-ffffffffffff');
@@ -247,7 +284,7 @@ BEGIN
   IF n <> 2 THEN RAISE EXCEPTION 'Bravo should see own and Alpha active requests only: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.contributions;
-  IF n <> 2 THEN RAISE EXCEPTION 'Bravo should see own and own-request contributions only: %', n; END IF;
+  IF n <> 3 THEN RAISE EXCEPTION 'Bravo should see own and own-request contributions only: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests
   WHERE id IN ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','ffffffff-ffff-4fff-8fff-ffffffffffff');
