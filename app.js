@@ -14,7 +14,7 @@
   let legacyCredentialsCleaned = false;
   const state = {
     session: null, data: null, publicProfiles: new Map(), view: 'home', detailId: null,
-    historyTab: 'all', history: { items: [], cursor: null, hasMore: true, loading: false, loaded: false }, requestStep: 1,
+    historyTab: 'all', historyGeneration: 0, history: { items: [], cursor: null, hasMore: true, loading: false, loaded: false }, requestStep: 1,
     draft: { value: '', category: '', description: '', durationHours: 48 },
     loading: false, loadedAt: 0, stale: false, generation: 0, loadPromise: null,
     recovery: false, confirmEmail: '', authMode: 'login',
@@ -233,14 +233,17 @@
 
   async function loadHistory(reset = false) {
     if (!hasSession() || state.history.loading) return;
-    if (reset) state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
+    if (reset) {
+      state.historyGeneration += 1;
+      state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
+    }
     if (state.history.loaded && !state.history.hasMore) return;
-    const generation = state.generation, kind = state.historyTab;
+    const generation = state.generation, historyGeneration = state.historyGeneration, kind = state.historyTab;
     state.history.loading = true;
     if (state.view === 'history') renderHistory();
     try {
       const page = await backend.historyPage(kind, state.history.cursor);
-      if (generation !== state.generation || kind !== state.historyTab) return;
+      if (generation !== state.generation || historyGeneration !== state.historyGeneration || kind !== state.historyTab) return;
       const rows = page.items || [];
       state.history.items.push(...rows);
       rows.forEach(item => {
@@ -254,7 +257,7 @@
     } catch (error) {
       if (generation === state.generation) toast(errorMessage(error));
     } finally {
-      if (generation === state.generation) {
+      if (generation === state.generation && historyGeneration === state.historyGeneration) {
         state.history.loading = false;
         if (state.historyReloadPending) {
           state.historyReloadPending = false;
@@ -309,6 +312,7 @@
         if (generation !== state.generation || state.session?.user.id !== userId) return;
         state.data = data;
         state.data.feedRequests = data.requests.slice();
+        state.historyGeneration += 1;
         state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
         state.publicProfiles = new Map(data.publicProfiles.map(profile => [profile.id, profile]));
         state.publicProfiles.set(userId, { id: userId, public_name: data.profile.public_name, level: data.profile.level });
