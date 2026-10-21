@@ -65,6 +65,7 @@ AS $$
     SELECT r.*
     FROM public.requests r
     WHERE r.status = 'active'
+      AND r.user_id <> (SELECT auth.uid())
       AND (r.expires_at IS NULL OR r.expires_at > statement_timestamp())
   ),
   closest AS (
