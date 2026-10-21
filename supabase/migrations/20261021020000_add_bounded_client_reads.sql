@@ -108,11 +108,14 @@ AS $$
   )
 $$;
 
-CREATE OR REPLACE FUNCTION public.somma_history_page(
+DROP FUNCTION IF EXISTS public.somma_history_page(text, timestamptz, uuid, integer);
+
+CREATE FUNCTION public.somma_history_page(
   p_kind text DEFAULT 'all',
   p_before_at timestamptz DEFAULT NULL,
   p_before_id uuid DEFAULT NULL,
-  p_limit integer DEFAULT 25
+  p_limit integer DEFAULT 25,
+  p_before_kind text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE sql
@@ -169,13 +172,13 @@ AS $$
   bounded AS (
     SELECT e.*
     FROM event_rows e
-    WHERE (p_before_at IS NULL OR (e.event_at, e.event_id) < (p_before_at, p_before_id))
-    ORDER BY e.event_at DESC, e.event_id DESC
+    WHERE (p_before_at IS NULL OR (e.event_at, e.event_id, e.kind) < (p_before_at, p_before_id, p_before_kind))
+    ORDER BY e.event_at DESC, e.event_id DESC, e.kind DESC
     LIMIT least(greatest(coalesce(p_limit, 25), 1), 50) + 1
   ),
   page AS (
     SELECT * FROM bounded
-    ORDER BY event_at DESC, event_id DESC
+    ORDER BY event_at DESC, event_id DESC, kind DESC
     LIMIT least(greatest(coalesce(p_limit, 25), 1), 50)
   )
   SELECT jsonb_build_object(
@@ -184,12 +187,13 @@ AS $$
         'kind', p.kind, 'time', p.event_at, 'event_id', p.event_id,
         'request', p.request, 'contribution', p.contribution,
         'person_id', p.person_id
-      ) ORDER BY p.event_at DESC, p.event_id DESC)
+      ) ORDER BY p.event_at DESC, p.event_id DESC, p.kind DESC)
       FROM page p
     ), '[]'::jsonb),
     'has_more', (SELECT count(*) > least(greatest(coalesce(p_limit, 25), 1), 50) FROM bounded),
-    'next_at', (SELECT p.event_at FROM page p ORDER BY p.event_at ASC, p.event_id ASC LIMIT 1),
-    'next_id', (SELECT p.event_id FROM page p ORDER BY p.event_at ASC, p.event_id ASC LIMIT 1)
+    'next_at', (SELECT p.event_at FROM page p ORDER BY p.event_at ASC, p.event_id ASC, p.kind ASC LIMIT 1),
+    'next_id', (SELECT p.event_id FROM page p ORDER BY p.event_at ASC, p.event_id ASC, p.kind ASC LIMIT 1),
+    'next_kind', (SELECT p.kind FROM page p ORDER BY p.event_at ASC, p.event_id ASC, p.kind ASC LIMIT 1)
   )
   WHERE (SELECT auth.uid()) IS NOT NULL
     AND p_kind IN ('all', 'request', 'helped', 'received')
@@ -197,7 +201,7 @@ $$;
 
 REVOKE ALL ON FUNCTION public.somma_user_summary() FROM PUBLIC, anon, service_role;
 REVOKE ALL ON FUNCTION public.somma_feed_summary() FROM PUBLIC, anon, service_role;
-REVOKE ALL ON FUNCTION public.somma_history_page(text, timestamptz, uuid, integer) FROM PUBLIC, anon, service_role;
+REVOKE ALL ON FUNCTION public.somma_history_page(text, timestamptz, uuid, integer, text) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.somma_user_summary() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.somma_feed_summary() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.somma_history_page(text, timestamptz, uuid, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.somma_history_page(text, timestamptz, uuid, integer, text) TO authenticated;
