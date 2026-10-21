@@ -48,16 +48,29 @@
     return result.data;
   }
 
-  async function allRows(table, build = query => query) {
-    const rows = [];
-    const pageSize = 500;
-    for (let start = 0; ; start += pageSize) {
-      let query = client.from(table).select(COLUMNS[table]);
-      query = build(query).order('created_at', { ascending: false }).order('id', { ascending: false });
-      const page = await unwrap(query.range(start, start + pageSize - 1));
-      rows.push(...page);
-      if (page.length < pageSize) return rows;
-    }
+  const PAGE_SIZE = 24;
+
+  async function feedPage(offset = 0) {
+    const now = new Date().toISOString();
+    const rows = await unwrap(client.from('requests').select(COLUMNS.requests)
+      .eq('status', 'active').or(`expires_at.is.null,expires_at.gt.${now}`)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1));
+    return { rows, hasMore: rows.length === PAGE_SIZE, nextOffset: offset + rows.length };
+  }
+
+  async function notificationPage(offset = 0) {
+    const result = await client.from('notifications').select(COLUMNS.notifications, { count: 'exact' })
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (result.error) throw result.error;
+    return { rows: result.data || [], total: result.count || 0, hasMore: offset + (result.data || []).length < (result.count || 0), nextOffset: offset + (result.data || []).length };
+  }
+
+  async function historyPage(kind = 'all', cursor = null) {
+    return unwrap(client.rpc('somma_history_page', {
+      p_kind: kind, p_before_at: cursor?.at || null, p_before_id: cursor?.id || null, p_limit: PAGE_SIZE
+    }));
   }
 
   async function publicProfiles(ids) {
@@ -69,18 +82,27 @@
   }
 
   async function snapshot(userId) {
-    const [profile, levels, requests, contributions, notifications] = await Promise.all([
+    const [profile, levels, requestsPage, feedSummary, metrics, activeOwn, notificationsPage, unreadResult] = await Promise.all([
       unwrap(client.from('profiles').select(COLUMNS.profiles).eq('id', userId).single()),
       unwrap(client.from('user_levels').select(COLUMNS.user_levels).order('sort_order')),
-      allRows('requests'),
-      allRows('contributions'),
-      allRows('notifications', query => query.eq('user_id', userId))
+      feedPage(0),
+      unwrap(client.rpc('somma_feed_summary')),
+      unwrap(client.rpc('somma_user_summary')),
+      unwrap(client.from('requests').select(COLUMNS.requests).eq('user_id', userId).eq('status', 'active')
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()),
+      notificationPage(0),
+      client.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null)
     ]);
-    const profiles = await publicProfiles([
-      ...requests.map(request => request.user_id),
-      ...contributions.map(contribution => contribution.contributor_user_id)
-    ]);
-    return { profile, levels, requests, contributions, notifications, publicProfiles: profiles };
+    if (unreadResult.error) throw unreadResult.error;
+    const requests = requestsPage.rows;
+    const profiles = await publicProfiles([...requests.map(request => request.user_id), feedSummary?.closest?.user_id, activeOwn?.user_id]);
+    return {
+      profile, levels, requests, activeOwn, feedSummary: feedSummary || { active_count: 0, closest: null },
+      metrics: metrics || {}, feedHasMore: requestsPage.hasMore, feedOffset: requestsPage.nextOffset,
+      notifications: notificationsPage.rows, notificationsTotal: notificationsPage.total,
+      notificationsHasMore: notificationsPage.hasMore, notificationsOffset: notificationsPage.nextOffset,
+      unreadCount: unreadResult.count || 0, history: null, publicProfiles: profiles
+    };
   }
 
   async function findContribution(intent) {
@@ -122,6 +144,11 @@
   window.SommaBackend = Object.freeze({
     client,
     snapshot,
+    feedPage,
+    notificationPage,
+    historyPage,
+    publicProfiles,
+    getRequest: id => unwrap(client.from('requests').select(COLUMNS.requests).eq('id', id).maybeSingle()),
     findContribution,
     contribute,
     createRequest: values => unwrap(client.from('requests').insert({
@@ -134,6 +161,6 @@
     saveName: (userId, name) => unwrap(client.from('profiles').update({ full_name: name })
       .eq('id', userId).select(COLUMNS.profiles).single()),
     markNotificationsRead: userId => unwrap(client.from('notifications').update({ read_at: new Date().toISOString() })
-      .eq('user_id', userId).is('read_at', null).select('id,read_at'))
+      .eq('user_id', userId).is('read_at', null))
   });
 })();
