@@ -260,8 +260,7 @@
           state.historyReloadPending = false;
           loadHistory(true);
         } else if (state.view === 'history') {
-          if (!state.history.loaded) loadHistory(true);
-          else renderHistory();
+          renderHistory();
         }
       }
     }
