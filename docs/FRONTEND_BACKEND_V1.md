@@ -40,7 +40,7 @@ O SDK usa sessão persistente, renovação automática e o fluxo de retorno `imp
 
 Esta integração espera as migrações do Backend v1, incluindo o endurecimento de integração aplicado em `20261017001333_backend_v1_integration_hardening.sql`. O esquema e a verificação do banco estão documentados fora da raiz do projeto, em `supabase/migrations/`, `tests/backend_v1_rollback.sql` e `docs/SETUP_BACKEND_V1.md`, relativos à raiz do projeto.
 
-Não há RPC pública criada ou exigida pelo frontend. `backend.js` usa estas operações:
+`backend.js` usa as tabelas protegidas por RLS e três RPCs públicas de leitura limitada, executadas como `SECURITY INVOKER` com `search_path` vazio. As RPCs não substituem o RLS nem concedem acesso a dados de outras contas:
 
 | Recurso | Leitura/ação da interface | Campos enviados na mutação |
 | --- | --- | --- |
@@ -50,9 +50,12 @@ Não há RPC pública criada ou exigida pelo frontend. `backend.js` usa estas op
 | `user_levels` | Níveis e limites definidos no servidor | Sem mutação |
 | `requests` | Pedidos visíveis à conta e publicação | `user_id`, `category`, `description`, `goal_cents`, `duration_hours` |
 | `contributions` | Apoios enviados/recebidos e registro de simulação | `request_id`, `contributor_user_id`, `amount_cents`, `idempotency_key` |
-| `notifications` | Avisos da própria conta e marcação como lidos | `read_at` |
+| `notifications` | Avisos da própria conta, paginação e marcação como lidos | `read_at` |
+| `somma_user_summary()` | Métricas agregadas da própria conta | Sem mutação |
+| `somma_feed_summary()` | Contagem e destaques limitados de pedidos ativos de outras contas | Sem mutação |
+| `somma_history_page(kind, before_at, before_id, limit, before_kind)` | Página do histórico com cursor por data, UUID e tipo de evento | Sem mutação |
 
-UUIDs permanecem strings. Valores monetários são inteiros em centavos. A interface não envia saldo arrecadado, taxa, status de contribuição, contagem de pessoas, nível, limite, início ou expiração de pedido. Esses campos são calculados ou protegidos no banco. As leituras são paginadas em lotes de 500 registros, e os perfis públicos são buscados somente para os IDs presentes no conjunto carregado.
+UUIDs permanecem strings. Valores monetários são inteiros em centavos. A interface não envia saldo arrecadado, taxa, status de contribuição, contagem de pessoas, nível, limite, início ou expiração de pedido. Esses campos são calculados ou protegidos no banco. Feed e notificações usam paginação por cursor com 24 itens por página e uma linha-sentinela para determinar `hasMore` sem confundir página cheia com existência de uma próxima página. O histórico usa RPC com cursor composto por data, UUID e tipo de evento para não perder nem duplicar eventos quando tabelas diferentes compartilham data e UUID. As métricas e os destaques são calculados no servidor, evitando baixar todas as contribuições e pedidos para recomputar totais no navegador. Os perfis públicos são buscados somente para os IDs presentes no conjunto carregado.
 
 ### Regras exibidas
 
