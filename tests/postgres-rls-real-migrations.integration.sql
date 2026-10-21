@@ -138,6 +138,24 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'bounded client read function is not SECURITY INVOKER with an empty search_path';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_index i
+    JOIN pg_class idx ON idx.oid = i.indexrelid
+    JOIN pg_class tbl ON tbl.oid = i.indrelid
+    JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+    JOIN pg_attribute key_col ON key_col.attrelid = i.indrelid
+      AND key_col.attnum = i.indkey[0]
+    WHERE ns.nspname = 'public'
+      AND tbl.relname = 'notifications'
+      AND idx.relname = 'notifications_unread_user_idx'
+      AND i.indisvalid AND i.indisready
+      AND i.indnkeyatts = 1
+      AND key_col.attname = 'user_id'
+      AND pg_get_expr(i.indpred, i.indrelid) ILIKE '%read_at IS NULL%'
+  ) THEN
+    RAISE EXCEPTION 'partial unread notification index is missing or invalid';
+  END IF;
   IF has_function_privilege('anon', 'public.somma_user_summary()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.somma_feed_summary()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE')
