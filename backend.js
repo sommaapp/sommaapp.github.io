@@ -82,7 +82,8 @@
 
   async function historyPage(kind = 'all', cursor = null) {
     return unwrap(client.rpc('somma_history_page', {
-      p_kind: kind, p_before_at: cursor?.at || null, p_before_id: cursor?.id || null, p_limit: PAGE_SIZE
+      p_kind: kind, p_before_at: cursor?.at || null, p_before_id: cursor?.id || null,
+      p_limit: PAGE_SIZE, p_before_kind: cursor?.kind || null
     }));
   }
 
