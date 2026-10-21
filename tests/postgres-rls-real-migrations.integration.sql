@@ -82,6 +82,40 @@ ALTER TABLE public.requests ENABLE TRIGGER requests_validate_insert;
 
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
+DO $bounded_read_tests$
+DECLARE
+  v_summary jsonb;
+  v_feed jsonb;
+  v_history jsonb;
+BEGIN
+  v_summary := public.somma_user_summary();
+  IF (v_summary->>'helped')::integer <> 1
+     OR (v_summary->>'contributed_cents')::integer <> 1000
+     OR (v_summary->>'received_count')::integer <> 1
+     OR (v_summary->>'received_month_cents')::integer <> 1000
+     OR v_summary->>'next_request_at' IS NULL THEN
+    RAISE EXCEPTION 'aggregated user summary is incorrect: %', v_summary;
+  END IF;
+
+  v_feed := public.somma_feed_summary();
+  IF (v_feed->>'active_count')::integer <> 2
+     OR v_feed->'closest' IS NULL OR v_feed->'closest' = 'null'::jsonb THEN
+    RAISE EXCEPTION 'feed summary did not return the exact visible active count and a featured row: %', v_feed;
+  END IF;
+
+  v_history := public.somma_history_page('all', NULL, NULL, 25);
+  IF jsonb_array_length(v_history->'items') <> 3
+     OR (v_history->>'has_more')::boolean THEN
+    RAISE EXCEPTION 'history first page did not return all three visible synthetic events: %', v_history;
+  END IF;
+
+  IF has_function_privilege('anon', 'public.somma_user_summary()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.somma_feed_summary()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'anon can execute a bounded client read function';
+  END IF;
+END $bounded_read_tests$;
+
 DO $test$
 DECLARE n integer;
 BEGIN
