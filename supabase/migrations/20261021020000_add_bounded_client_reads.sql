@@ -62,7 +62,14 @@ AS $$
       AND (r.expires_at IS NULL OR r.expires_at > statement_timestamp())
   ),
   closest AS (
-    SELECT to_jsonb(r) AS request
+    SELECT jsonb_build_object(
+      'id', r.id, 'user_id', r.user_id, 'category', r.category,
+      'description', r.description, 'goal_cents', r.goal_cents,
+      'raised_cents', r.raised_cents, 'status', r.status,
+      'starts_at', r.starts_at, 'expires_at', r.expires_at,
+      'created_at', r.created_at, 'helper_count', r.helper_count,
+      'duration_hours', r.duration_hours
+    ) AS request
     FROM active r
     ORDER BY (r.goal_cents - r.raised_cents), r.created_at DESC, r.id DESC
     LIMIT 1
@@ -74,7 +81,14 @@ AS $$
     LIMIT 1
   ),
   almost AS (
-    SELECT to_jsonb(r) AS request
+    SELECT jsonb_build_object(
+      'id', r.id, 'user_id', r.user_id, 'category', r.category,
+      'description', r.description, 'goal_cents', r.goal_cents,
+      'raised_cents', r.raised_cents, 'status', r.status,
+      'starts_at', r.starts_at, 'expires_at', r.expires_at,
+      'created_at', r.created_at, 'helper_count', r.helper_count,
+      'duration_hours', r.duration_hours
+    ) AS request
     FROM active r
     WHERE r.id <> (SELECT id FROM latest)
     ORDER BY (r.goal_cents - r.raised_cents), r.created_at DESC, r.id DESC
