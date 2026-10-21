@@ -59,7 +59,7 @@ AS $$
     SELECT r.*
     FROM public.requests r
     WHERE r.status = 'active'
-      AND r.expires_at > statement_timestamp()
+      AND (r.expires_at IS NULL OR r.expires_at > statement_timestamp())
   ),
   closest AS (
     SELECT to_jsonb(r) AS request
@@ -69,6 +69,7 @@ AS $$
   )
   SELECT jsonb_build_object(
     'active_count', (SELECT count(*) FROM active),
+    'completed_count', (SELECT count(*) FROM public.requests WHERE status = 'completed'),
     'closest', (SELECT request FROM closest)
   )
 $$;
