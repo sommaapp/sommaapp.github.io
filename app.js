@@ -168,6 +168,9 @@
     state.generation += 1;
     state.session = null;
     state.data = null;
+    state.historyGeneration += 1;
+    state.historyReloadPending = false;
+    state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
     state.publicProfiles = new Map();
     state.loadedAt = 0;
     state.loading = false;
@@ -351,6 +354,9 @@
       state.generation += 1;
       state.loadPromise = null;
       state.data = null;
+      state.historyGeneration += 1;
+      state.historyReloadPending = false;
+      state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
       state.contributionIntent = null;
       state.publicProfiles = new Map();
     }
