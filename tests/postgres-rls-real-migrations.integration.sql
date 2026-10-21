@@ -128,10 +128,19 @@ BEGIN
   END IF;
 
   v_feed := public.somma_feed_summary();
-  IF (v_feed->>'active_count')::integer <> 2
-     OR v_feed->'closest' IS NULL OR v_feed->'closest' = 'null'::jsonb THEN
-    RAISE EXCEPTION 'feed summary did not return the exact visible active count and a featured row: %', v_feed;
+  IF (v_feed->>'active_count')::integer <> 1
+     OR v_feed->'closest' IS NULL OR v_feed->'closest' = 'null'::jsonb
+     OR v_feed->'closest'->>'user_id' = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' THEN
+    RAISE EXCEPTION 'feed summary did not return other users only with the exact active count: %', v_feed;
   END IF;
+  PERFORM set_config('request.jwt.claim.sub','cccccccc-cccc-4ccc-8ccc-cccccccccccc',false);
+  v_feed := public.somma_feed_summary();
+  IF (v_feed->>'active_count')::integer <> 2
+     OR v_feed->'closest'->>'user_id' = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+     OR v_feed->'almost'->>'user_id' = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' THEN
+    RAISE EXCEPTION 'suspended owner request appeared in its own public feed summary: %', v_feed;
+  END IF;
+  PERFORM set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
   IF v_feed->'closest' ? 'synthetic_internal_tag'
      OR v_feed->'almost' ? 'synthetic_internal_tag' THEN
     RAISE EXCEPTION 'feed summary exposed a column outside its explicit projection: %', v_feed;
