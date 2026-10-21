@@ -25,7 +25,7 @@ async function main(){
  const page=debugPage=await context.newPage();page.setDefaultTimeout(7000);page.on('pageerror',e=>errors.push(String(e)));
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),method=req.method();
-  const headers={'content-type':'application/json','access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS'};
+  const headers={'content-type':'application/json','access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS','access-control-expose-headers':'content-range, content-location, preference-applied'};
   const respond=(data,status=200)=>route.fulfill({status,headers,body:status===204?'':JSON.stringify(data)});
   if(url.hostname==='somma.test'){
    let name=decodeURIComponent(url.pathname);if(name==='/')name='/index.html';
