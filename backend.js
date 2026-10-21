@@ -50,21 +50,29 @@
 
   const PAGE_SIZE = 24;
 
-  async function feedPage(offset = 0) {
-    const now = new Date().toISOString();
-    const rows = await unwrap(client.from('requests').select(COLUMNS.requests)
-      .eq('status', 'active').or(`expires_at.is.null,expires_at.gt.${now}`)
-      .order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1));
-    return { rows, hasMore: rows.length === PAGE_SIZE, nextOffset: offset + rows.length };
+  function afterCursor(query, cursor) {
+    if (!cursor?.at || !cursor?.id) return query;
+    const at = new Date(cursor.at).toISOString();
+    return query.or(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${cursor.id})`);
   }
 
-  async function notificationPage(offset = 0) {
-    const result = await client.from('notifications').select(COLUMNS.notifications, { count: 'exact' })
-      .order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
+  async function feedPage(cursor = null) {
+    const now = new Date().toISOString();
+    let query = client.from('requests').select(COLUMNS.requests)
+      .eq('status', 'active').or(`expires_at.is.null,expires_at.gt.${now}`);
+    query = afterCursor(query, cursor).order('created_at', { ascending: false }).order('id', { ascending: false });
+    const rows = await unwrap(query.range(0, PAGE_SIZE - 1));
+    const last = rows[rows.length - 1];
+    return { rows, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
+  }
+
+  async function notificationPage(cursor = null) {
+    let query = afterCursor(client.from('notifications').select(COLUMNS.notifications, { count: 'exact' }), cursor)
+      .order('created_at', { ascending: false }).order('id', { ascending: false });
+    const result = await query.range(0, PAGE_SIZE - 1);
     if (result.error) throw result.error;
-    return { rows: result.data || [], total: result.count || 0, hasMore: offset + (result.data || []).length < (result.count || 0), nextOffset: offset + (result.data || []).length };
+    const rows = result.data || [], last = rows[rows.length - 1];
+    return { rows, total: result.count || 0, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
   }
 
   async function historyPage(kind = 'all', cursor = null) {
@@ -85,12 +93,12 @@
     const [profile, levels, requestsPage, feedSummary, metrics, activeOwn, notificationsPage, unreadResult] = await Promise.all([
       unwrap(client.from('profiles').select(COLUMNS.profiles).eq('id', userId).single()),
       unwrap(client.from('user_levels').select(COLUMNS.user_levels).order('sort_order')),
-      feedPage(0),
+      feedPage(null),
       unwrap(client.rpc('somma_feed_summary')),
       unwrap(client.rpc('somma_user_summary')),
       unwrap(client.from('requests').select(COLUMNS.requests).eq('user_id', userId).eq('status', 'active')
         .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()),
-      notificationPage(0),
+      notificationPage(null),
       client.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null)
     ]);
     if (unreadResult.error) throw unreadResult.error;
@@ -98,9 +106,9 @@
     const profiles = await publicProfiles([...requests.map(request => request.user_id), feedSummary?.closest?.user_id, activeOwn?.user_id]);
     return {
       profile, levels, requests, activeOwn, feedSummary: feedSummary || { active_count: 0, closest: null },
-      metrics: metrics || {}, feedHasMore: requestsPage.hasMore, feedOffset: requestsPage.nextOffset,
+      metrics: metrics || {}, feedHasMore: requestsPage.hasMore, feedCursor: requestsPage.nextCursor,
       notifications: notificationsPage.rows, notificationsTotal: notificationsPage.total,
-      notificationsHasMore: notificationsPage.hasMore, notificationsOffset: notificationsPage.nextOffset,
+      notificationsHasMore: notificationsPage.hasMore, notificationsCursor: notificationsPage.nextCursor,
       unreadCount: unreadResult.count || 0, history: null, publicProfiles: profiles
     };
   }
