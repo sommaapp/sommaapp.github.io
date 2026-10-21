@@ -103,10 +103,17 @@ BEGIN
     RAISE EXCEPTION 'feed summary did not return the exact visible active count and a featured row: %', v_feed;
   END IF;
 
-  v_history := public.somma_history_page('all', NULL, NULL, 25);
-  IF jsonb_array_length(v_history->'items') <> 3
+  v_history := public.somma_history_page('all', NULL, NULL, 2);
+  IF jsonb_array_length(v_history->'items') <> 2
+     OR NOT (v_history->>'has_more')::boolean THEN
+    RAISE EXCEPTION 'history first cursor page is incorrect: %', v_history;
+  END IF;
+  v_history := public.somma_history_page(
+    'all', (v_history->>'next_at')::timestamptz, (v_history->>'next_id')::uuid, 2
+  );
+  IF jsonb_array_length(v_history->'items') <> 1
      OR (v_history->>'has_more')::boolean THEN
-    RAISE EXCEPTION 'history first page did not return all three visible synthetic events: %', v_history;
+    RAISE EXCEPTION 'history second cursor page duplicated or skipped synthetic events: %', v_history;
   END IF;
 
   IF has_function_privilege('anon', 'public.somma_user_summary()', 'EXECUTE')
