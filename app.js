@@ -256,7 +256,10 @@
     } finally {
       if (generation === state.generation) {
         state.history.loading = false;
-        if (state.view === 'history') {
+        if (state.historyReloadPending) {
+          state.historyReloadPending = false;
+          loadHistory(true);
+        } else if (state.view === 'history') {
           if (!state.history.loaded) loadHistory(true);
           else renderHistory();
         }
@@ -268,13 +271,13 @@
     if (!state.data?.feedHasMore || state.loading) return;
     state.loading = true; updateSync();
     try {
-      const page = await backend.feedPage(state.data.feedOffset);
+      const page = await backend.feedPage(state.data.feedCursor);
       page.rows.forEach(request => {
         if (!state.data.requests.some(item => item.id === request.id)) state.data.requests.push(request);
         if (!state.data.feedRequests.some(item => item.id === request.id)) state.data.feedRequests.push(request);
       });
       (await backend.publicProfiles(page.rows.map(request => request.user_id))).forEach(profile => state.publicProfiles.set(profile.id, profile));
-      state.data.feedHasMore = page.hasMore; state.data.feedOffset = page.nextOffset;
+      state.data.feedHasMore = page.hasMore; state.data.feedCursor = page.nextCursor;
       if (state.view === 'help') renderHelp();
     } catch (error) { toast(errorMessage(error)); }
     finally { state.loading = false; updateSync(); }
@@ -284,10 +287,10 @@
     if (!state.data?.notificationsHasMore || state.loading) return;
     state.loading = true; updateSync();
     try {
-      const page = await backend.notificationPage(state.data.notificationsOffset);
+      const page = await backend.notificationPage(state.data.notificationsCursor);
       const known = new Set(state.data.notifications.map(item => item.id));
       state.data.notifications.push(...page.rows.filter(item => !known.has(item.id)));
-      state.data.notificationsHasMore = page.hasMore; state.data.notificationsOffset = page.nextOffset;
+      state.data.notificationsHasMore = page.hasMore; state.data.notificationsCursor = page.nextCursor;
       if (state.view === 'notifications') renderNotifications();
     } catch (error) { toast(errorMessage(error)); }
     finally { state.loading = false; updateSync(); }
@@ -851,7 +854,11 @@
     if (button.id === 'refresh-data') { loadData().catch(() => {}); return; }
     if (button.id === 'detail-refresh') { ensureRequest(state.detailId).then(() => renderDetail()).catch(error => toast(errorMessage(error))); return; }
     if (button.dataset.historyTab) {
-      if (state.historyTab !== button.dataset.historyTab) { state.historyTab = button.dataset.historyTab; loadHistory(true); }
+      if (state.historyTab !== button.dataset.historyTab) {
+        state.historyTab = button.dataset.historyTab;
+        if (state.history.loading) state.historyReloadPending = true;
+        else loadHistory(true);
+      }
       return;
     }
     if (button.id === 'more-history') { loadHistory(); return; }
