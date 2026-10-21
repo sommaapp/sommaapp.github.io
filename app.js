@@ -470,8 +470,7 @@
     $('#page-title').textContent = 'Início';
     const active = state.data.feedRequests.filter(request => effectiveStatus(request) === 'active');
     const primary = active[0] || state.data.feedSummary.closest;
-    const closest = state.data.feedSummary.closest;
-    const almost = closest && closest.id !== primary?.id ? closest : null;
+    const almost = state.data.feedSummary.almost || null;
     const activeCount = Number(state.data.feedSummary.active_count || 0);
     const completed = Number(state.data.feedSummary.completed_count || 0);
     app.innerHTML = `<div class="content">
@@ -612,7 +611,11 @@
 
   function setupContribution(id) {
     const request = requestById(id);
-    if (!request || request.user_id === state.session.user.id) { state.modalRequestId = null; closeDialogOnly(); return; }
+    if (!request) {
+      ensureRequest(id).then(found => { if (found && state.modalRequestId === id) setupContribution(id); }).catch(error => toast(errorMessage(error)));
+      return;
+    }
+    if (request.user_id === state.session.user.id) { state.modalRequestId = null; closeDialogOnly(); return; }
     const pending = state.contributionIntent?.requestId === id ? state.contributionIntent : null;
     state.modalRequestId = id;
     state.selectedCents = pending ? pending.amountCents : 0;
