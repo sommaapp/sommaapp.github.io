@@ -56,9 +56,10 @@
     return query.or(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${cursor.id})`);
   }
 
-  async function feedPage(cursor = null) {
+  async function feedPage(userId, cursor = null) {
     const now = new Date().toISOString();
-    let query = client.from('requests').select(COLUMNS.requests).eq('status', 'active');
+    let query = client.from('requests').select(COLUMNS.requests)
+      .eq('status', 'active').neq('user_id', userId);
     if (cursor?.at && cursor?.id) {
       const at = new Date(cursor.at).toISOString();
       query = query.or(`and(expires_at.is.null,created_at.lt.${at}),and(expires_at.is.null,created_at.eq.${at},id.lt.${cursor.id}),and(expires_at.gt.${now},created_at.lt.${at}),and(expires_at.gt.${now},created_at.eq.${at},id.lt.${cursor.id})`);
@@ -99,7 +100,7 @@
     const [profile, levels, requestsPage, feedSummary, metrics, activeOwn, notificationsPage, unreadResult] = await Promise.all([
       unwrap(client.from('profiles').select(COLUMNS.profiles).eq('id', userId).single()),
       unwrap(client.from('user_levels').select(COLUMNS.user_levels).order('sort_order')),
-      feedPage(null),
+      feedPage(userId, null),
       unwrap(client.rpc('somma_feed_summary')),
       unwrap(client.rpc('somma_user_summary')),
       unwrap(client.from('requests').select(COLUMNS.requests).eq('user_id', userId).eq('status', 'active')
