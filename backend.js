@@ -58,9 +58,14 @@
 
   async function feedPage(cursor = null) {
     const now = new Date().toISOString();
-    let query = client.from('requests').select(COLUMNS.requests)
-      .eq('status', 'active').or(`expires_at.is.null,expires_at.gt.${now}`);
-    query = afterCursor(query, cursor).order('created_at', { ascending: false }).order('id', { ascending: false });
+    let query = client.from('requests').select(COLUMNS.requests).eq('status', 'active');
+    if (cursor?.at && cursor?.id) {
+      const at = new Date(cursor.at).toISOString();
+      query = query.or(`and(expires_at.is.null,created_at.lt.${at}),and(expires_at.is.null,created_at.eq.${at},id.lt.${cursor.id}),and(expires_at.gt.${now},created_at.lt.${at}),and(expires_at.gt.${now},created_at.eq.${at},id.lt.${cursor.id})`);
+    } else {
+      query = query.or(`expires_at.is.null,expires_at.gt.${now}`);
+    }
+    query = query.order('created_at', { ascending: false }).order('id', { ascending: false });
     const rows = await unwrap(query.range(0, PAGE_SIZE - 1));
     const last = rows[rows.length - 1];
     return { rows, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
