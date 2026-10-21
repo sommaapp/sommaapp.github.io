@@ -50,6 +50,16 @@
 
   const PAGE_SIZE = 24;
 
+  function pageFromRows(rows, cursor) {
+    const pageRows = rows.slice(0, PAGE_SIZE);
+    const last = pageRows[pageRows.length - 1];
+    return {
+      rows: pageRows,
+      hasMore: rows.length > PAGE_SIZE,
+      nextCursor: last ? { at: last.created_at, id: last.id } : cursor
+    };
+  }
+
   function afterCursor(query, cursor) {
     if (!cursor?.at || !cursor?.id) return query;
     const at = new Date(cursor.at).toISOString();
@@ -67,18 +77,16 @@
       query = query.or(`expires_at.is.null,expires_at.gt.${now}`);
     }
     query = query.order('created_at', { ascending: false }).order('id', { ascending: false });
-    const rows = await unwrap(query.range(0, PAGE_SIZE - 1));
-    const last = rows[rows.length - 1];
-    return { rows, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
+    const rows = await unwrap(query.range(0, PAGE_SIZE));
+    return pageFromRows(rows, cursor);
   }
 
   async function notificationPage(userId, cursor = null) {
     let query = afterCursor(client.from('notifications').select(COLUMNS.notifications).eq('user_id', userId), cursor)
       .order('created_at', { ascending: false }).order('id', { ascending: false });
-    const result = await query.range(0, PAGE_SIZE - 1);
+    const result = await query.range(0, PAGE_SIZE);
     if (result.error) throw result.error;
-    const rows = result.data || [], last = rows[rows.length - 1];
-    return { rows, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
+    return pageFromRows(result.data || [], cursor);
   }
 
   async function historyPage(kind = 'all', cursor = null) {
