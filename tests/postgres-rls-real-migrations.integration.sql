@@ -120,6 +120,11 @@ DECLARE
 BEGIN
   v_summary := public.somma_user_summary();
   IF (v_summary->>'helped')::integer <> 1
+     OR (v_summary->>'supported_requests')::integer <> (
+       SELECT count(DISTINCT request_id) FROM public.contributions
+       WHERE contributor_user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+         AND status = 'simulated_confirmed'
+     )
      OR (v_summary->>'contributed_cents')::integer <> 1200
      OR (v_summary->>'received_count')::integer <> 1
      OR (v_summary->>'received_month_cents')::integer <> 1000
