@@ -277,7 +277,7 @@
     if (!state.data?.feedHasMore || state.loading) return;
     state.loading = true; updateSync();
     try {
-      const page = await backend.feedPage(state.data.feedCursor);
+      const page = await backend.feedPage(state.session.user.id, state.data.feedCursor);
       page.rows.forEach(request => {
         if (!state.data.requests.some(item => item.id === request.id)) state.data.requests.push(request);
         if (!state.data.feedRequests.some(item => item.id === request.id)) state.data.feedRequests.push(request);
