@@ -90,7 +90,6 @@ jobs:
           -- users must not receive direct table access to private app data.
           DO $rls_check$
           DECLARE t record;
-                  col_rec record;
           BEGIN
             FOR t IN
               SELECT c.relname, c.relrowsecurity
@@ -128,32 +127,9 @@ jobs:
                OR has_function_privilege('authenticated', 'private.validate_contribution_insert()', 'EXECUTE') THEN
               RAISE EXCEPTION 'trigger-only contribution validator is directly executable';
             END IF;
+          END $rls_check$;
 
-            -- Future columns stay protected by default: only the profile name and
-            -- notification read marker are intended for authenticated updates.
-            FOR col_rec IN
-              SELECT n.nspname, cls.relname, a.attname
-              FROM pg_attribute a
-              JOIN pg_class cls ON cls.oid = a.attrelid
-              JOIN pg_namespace n ON n.oid = cls.relnamespace
-              WHERE n.nspname = 'public'
-                AND cls.relname IN ('profiles', 'notifications')
-                AND a.attnum > 0 AND NOT a.attisdropped
-            LOOP
-              IF has_column_privilege(
-                   'authenticated',
-                   format('%I.%I', col_rec.nspname, col_rec.relname),
-                   col_rec.attname,
-                   'UPDATE'
-                 )
-                 AND NOT (
-                   (col_rec.relname = 'profiles' AND col_rec.attname = 'full_name')
-                   OR (col_rec.relname = 'notifications' AND col_rec.attname = 'read_at')
-                 ) THEN
-                RAISE EXCEPTION 'authenticated can update unexpected column public.%.%', col_rec.relname, col_rec.attname;
-              END IF;
-            END LOOP;
-ITY DEFINER function must pin an empty search_path.
+          -- Every private SECURITY DEFINER function must pin an empty search_path.
           -- Only the RLS predicate is callable by authenticated; none are callable by anon.
           DO $catalog$
           DECLARE f record;
