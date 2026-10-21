@@ -254,13 +254,12 @@ END $test$ LANGUAGE plpgsql;
 
 -- Report insertion must bind the reporter to auth.uid(), accept only
 -- visible targets, trim user text, and force the initial status.
-INSERT INTO public.reports (reporter_user_id, target_type, target_id, reason, status)
+INSERT INTO public.reports (reporter_user_id, target_type, target_id, reason)
 VALUES (
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'profile',
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  '  Synthetic profile report  ',
-  'resolved'
+  '  Synthetic profile report  '
 );
 
 DO $report_tests$
