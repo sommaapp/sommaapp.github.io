@@ -90,6 +90,7 @@ jobs:
           -- users must not receive direct table access to private app data.
           DO $rls_check$
           DECLARE t record;
+                  c record;
           BEGIN
             FOR t IN
               SELECT c.relname, c.relrowsecurity
@@ -127,6 +128,31 @@ jobs:
                OR has_function_privilege('authenticated', 'private.validate_contribution_insert()', 'EXECUTE') THEN
               RAISE EXCEPTION 'trigger-only contribution validator is directly executable';
             END IF;
+
+            -- Future columns stay protected by default: only the profile name and
+            -- notification read marker are intended for authenticated updates.
+            FOR c IN
+              SELECT n.nspname, cls.relname, a.attname
+              FROM pg_attribute a
+              JOIN pg_class cls ON cls.oid = a.attrelid
+              JOIN pg_namespace n ON n.oid = cls.relnamespace
+              WHERE n.nspname = 'public'
+                AND cls.relname IN ('profiles', 'notifications')
+                AND a.attnum > 0 AND NOT a.attisdropped
+            LOOP
+              IF has_column_privilege(
+                   'authenticated',
+                   format('%I.%I', c.nspname, c.relname),
+                   c.attname,
+                   'UPDATE'
+                 )
+                 AND NOT (
+                   (c.relname = 'profiles' AND c.attname = 'full_name')
+                   OR (c.relname = 'notifications' AND c.attname = 'read_at')
+                 ) THEN
+                RAISE EXCEPTION 'authenticated can update unexpected column public.%.%', c.relname, c.attname;
+              END IF;
+            END LOOP;
           END $rls_check$;
 
           -- Every private SECURITY DEFINER function must pin an empty search_path.
