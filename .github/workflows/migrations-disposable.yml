@@ -115,7 +115,8 @@ jobs:
             IF has_column_privilege('authenticated', 'public.profiles', 'account_status', 'UPDATE')
                OR has_column_privilege('authenticated', 'public.profiles', 'level', 'UPDATE')
                OR has_column_privilege('authenticated', 'public.profiles', 'request_limit_cents', 'UPDATE')
-               OR has_column_privilege('authenticated', 'public.profiles', 'period_limit_cents', 'UPDATE') THEN
+               OR has_column_privilege('authenticated', 'public.profiles', 'period_limit_cents', 'UPDATE')
+             OR has_column_privilege('authenticated', 'public.profiles', 'public_name', 'UPDATE') THEN
               RAISE EXCEPTION 'authenticated can update protected profile fields';
             END IF;
             IF has_column_privilege('authenticated', 'public.notifications', 'body', 'UPDATE')
