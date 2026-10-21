@@ -90,7 +90,7 @@ jobs:
           -- users must not receive direct table access to private app data.
           DO $rls_check$
           DECLARE t record;
-                  c record;
+                  col_rec record;
           BEGIN
             FOR t IN
               SELECT c.relname, c.relrowsecurity
@@ -131,7 +131,7 @@ jobs:
 
             -- Future columns stay protected by default: only the profile name and
             -- notification read marker are intended for authenticated updates.
-            FOR c IN
+            FOR col_rec IN
               SELECT n.nspname, cls.relname, a.attname
               FROM pg_attribute a
               JOIN pg_class cls ON cls.oid = a.attrelid
@@ -142,20 +142,18 @@ jobs:
             LOOP
               IF has_column_privilege(
                    'authenticated',
-                   format('%I.%I', c.nspname, c.relname),
-                   c.attname,
+                   format('%I.%I', col_rec.nspname, col_rec.relname),
+                   col_rec.attname,
                    'UPDATE'
                  )
                  AND NOT (
-                   (c.relname = 'profiles' AND c.attname = 'full_name')
-                   OR (c.relname = 'notifications' AND c.attname = 'read_at')
+                   (col_rec.relname = 'profiles' AND col_rec.attname = 'full_name')
+                   OR (col_rec.relname = 'notifications' AND col_rec.attname = 'read_at')
                  ) THEN
-                RAISE EXCEPTION 'authenticated can update unexpected column public.%.%', c.relname, c.attname;
+                RAISE EXCEPTION 'authenticated can update unexpected column public.%.%', col_rec.relname, col_rec.attname;
               END IF;
             END LOOP;
-          END $rls_check$;
-
-          -- Every private SECURITY DEFINER function must pin an empty search_path.
+ITY DEFINER function must pin an empty search_path.
           -- Only the RLS predicate is callable by authenticated; none are callable by anon.
           DO $catalog$
           DECLARE f record;
