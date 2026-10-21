@@ -71,8 +71,8 @@
     return { rows, hasMore: rows.length === PAGE_SIZE, nextCursor: last ? { at: last.created_at, id: last.id } : cursor };
   }
 
-  async function notificationPage(cursor = null) {
-    let query = afterCursor(client.from('notifications').select(COLUMNS.notifications), cursor)
+  async function notificationPage(userId, cursor = null) {
+    let query = afterCursor(client.from('notifications').select(COLUMNS.notifications).eq('user_id', userId), cursor)
       .order('created_at', { ascending: false }).order('id', { ascending: false });
     const result = await query.range(0, PAGE_SIZE - 1);
     if (result.error) throw result.error;
@@ -103,8 +103,8 @@
       unwrap(client.rpc('somma_user_summary')),
       unwrap(client.from('requests').select(COLUMNS.requests).eq('user_id', userId).eq('status', 'active')
         .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()),
-      notificationPage(null),
-      client.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null)
+      notificationPage(userId, null),
+      client.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('read_at', null)
     ]);
     if (unreadResult.error) throw unreadResult.error;
     const requests = requestsPage.rows;
