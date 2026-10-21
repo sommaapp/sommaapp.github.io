@@ -47,6 +47,50 @@ WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 -- A and B create their own requests through the actual grants, RLS policies,
 -- and production trigger functions loaded from the versioned migrations.
+-- The production policy intentionally preserves contributor history. To
+-- exercise the metric's RLS independence, temporarily model a stricter policy
+-- that hides completed requests from non-owners, assert the request is hidden
+-- and the aggregate still counts its confirmed contribution, then restore the
+-- production policy before running the normal history/feed assertions.
+ALTER POLICY requests_read ON public.requests
+  USING (
+    (SELECT auth.uid()) = user_id
+    OR (
+      private.can_read_request(id)
+      AND (
+        user_id = (SELECT auth.uid())
+        OR status <> 'completed'
+      )
+    )
+  );
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
+DO $supported_requests_rls_regression$
+DECLARE
+  v_summary jsonb;
+  v_hidden_count integer;
+BEGIN
+  SELECT count(*) INTO v_hidden_count
+  FROM public.requests
+  WHERE id = '99999999-9999-4999-8999-999999999999';
+
+  IF v_hidden_count <> 0 THEN
+    RAISE EXCEPTION 'completed request should be hidden from contributor under the temporary restrictive policy';
+  END IF;
+
+  v_summary := public.somma_user_summary();
+  IF (v_summary->>'supported_requests')::integer <> 2 THEN
+    RAISE EXCEPTION 'supported_requests changed when a completed request row was hidden by RLS: %', v_summary;
+  END IF;
+END $supported_requests_rls_regression$;
+RESET ROLE;
+
+-- Restore the production policy so the remaining integration tests validate
+-- the intended owner/contributor history behavior.
+ALTER POLICY requests_read ON public.requests
+  USING ((SELECT auth.uid()) = user_id OR private.can_read_request(id));
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
 INSERT INTO public.requests (user_id, category, description, goal_cents, duration_hours)
