@@ -109,6 +109,30 @@ FROM public.requests
 WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 ALTER TABLE public.contributions ENABLE TRIGGER USER;
 
+-- A confirmed contribution to a completed request owned by B must still count
+-- for A's supported-request metric even though requests RLS hides B's completed row.
+ALTER TABLE public.requests DISABLE TRIGGER USER;
+INSERT INTO public.requests
+  (id, user_id, category, description, goal_cents, raised_cents, status,
+   starts_at, expires_at, created_at, updated_at, duration_hours)
+VALUES
+  ('99999999-9999-4999-8999-999999999999',
+   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Outro', 'Synthetic completed hidden request',
+   2000, 200, 'completed', '2000-01-01 UTC', '2000-01-02 UTC',
+   '2000-01-01 UTC', '2000-01-01 UTC', 24);
+ALTER TABLE public.requests ENABLE TRIGGER USER;
+ALTER TABLE public.contributions DISABLE TRIGGER USER;
+INSERT INTO public.contributions
+  (id, request_id, contributor_user_id, amount_cents, platform_fee_cents,
+   status, created_at, idempotency_key)
+VALUES
+  ('99999999-9999-4999-8999-999999999998',
+   '99999999-9999-4999-8999-999999999999',
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 200, 30,
+   'simulated_confirmed', '2000-01-01 UTC',
+   '99999999-9999-4999-8999-999999999997');
+ALTER TABLE public.contributions ENABLE TRIGGER USER;
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
 DO $bounded_read_tests$
@@ -120,12 +144,8 @@ DECLARE
 BEGIN
   v_summary := public.somma_user_summary();
   IF (v_summary->>'helped')::integer <> 1
-     OR (v_summary->>'supported_requests')::integer <> (
-       SELECT count(DISTINCT request_id) FROM public.contributions
-       WHERE contributor_user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-         AND status = 'simulated_confirmed'
-     )
-     OR (v_summary->>'contributed_cents')::integer <> 1200
+     OR (v_summary->>'supported_requests')::integer <> 2
+     OR (v_summary->>'contributed_cents')::integer <> 1400
      OR (v_summary->>'received_count')::integer <> 1
      OR (v_summary->>'received_month_cents')::integer <> 1000
      OR v_summary->>'next_request_at' IS NULL THEN
