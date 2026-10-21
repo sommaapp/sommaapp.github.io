@@ -9,16 +9,30 @@ INSERT INTO auth.users (id, raw_user_meta_data) VALUES
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '{"full_name":"Synthetic Bravo"}'),
   ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '{"full_name":"Synthetic Charlie"}'),
   ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '{"full_name":"Synthetic Delta"}'),
-  ('99999999-9999-4999-8999-999999999999', '{}');
+  ('99999999-9999-4999-8999-999999999999', '{}'),
+  ('88888888-8888-4888-8888-888888888888', '{"full_name":"   "}');
 
 DO $signup_fallback$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = '99999999-9999-4999-8999-999999999999'
+    WHERE id IN (
+      '99999999-9999-4999-8999-999999999999',
+      '88888888-8888-4888-8888-888888888888'
+    )
       AND full_name = 'Membro' AND public_name = 'Membro'
   ) THEN
-    RAISE EXCEPTION 'signup without full_name metadata did not create the fallback profile';
+    RAISE EXCEPTION 'signup without a non-empty full_name did not create the fallback profile';
+  END IF;
+  IF (
+    SELECT count(*) FROM public.profiles
+    WHERE id IN (
+      '99999999-9999-4999-8999-999999999999',
+      '88888888-8888-4888-8888-888888888888'
+    )
+      AND full_name = 'Membro' AND public_name = 'Membro'
+  ) <> 2 THEN
+    RAISE EXCEPTION 'missing and blank full_name metadata did not both create fallback profiles';
   END IF;
 END $signup_fallback$;
 
