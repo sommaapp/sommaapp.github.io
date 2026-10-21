@@ -108,7 +108,7 @@
     ]);
     if (unreadResult.error) throw unreadResult.error;
     const requests = requestsPage.rows;
-    const profiles = await publicProfiles([...requests.map(request => request.user_id), feedSummary?.closest?.user_id, activeOwn?.user_id]);
+    const profiles = await publicProfiles([...requests.map(request => request.user_id), feedSummary?.closest?.user_id, feedSummary?.almost?.user_id, activeOwn?.user_id]);
     return {
       profile, levels, requests, activeOwn, feedSummary: feedSummary || { active_count: 0, closest: null },
       metrics: metrics || {}, feedHasMore: requestsPage.hasMore, feedCursor: requestsPage.nextCursor,
