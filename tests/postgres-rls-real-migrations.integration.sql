@@ -1,6 +1,11 @@
 \set ON_ERROR_STOP on
 BEGIN;
 
+-- Add a temporary synthetic column so public RPCs prove they return only their
+-- explicit field allowlist, even if the base table gains a private column.
+ALTER TABLE public.requests
+  ADD COLUMN synthetic_internal_tag text NOT NULL DEFAULT 'fixture-only';
+
 -- This test runs only after all versioned migrations have been applied to a
 -- disposable PostgreSQL database with the minimal auth.users/auth.uid shim.
 -- All identities and content below are synthetic; ROLLBACK removes fixtures.
@@ -102,6 +107,10 @@ BEGIN
      OR v_feed->'closest' IS NULL OR v_feed->'closest' = 'null'::jsonb THEN
     RAISE EXCEPTION 'feed summary did not return the exact visible active count and a featured row: %', v_feed;
   END IF;
+  IF v_feed->'closest' ? 'synthetic_internal_tag'
+     OR v_feed->'almost' ? 'synthetic_internal_tag' THEN
+    RAISE EXCEPTION 'feed summary exposed a column outside its explicit projection: %', v_feed;
+  END IF;
 
   v_history := public.somma_history_page('all', NULL, NULL, 2);
   IF jsonb_array_length(v_history->'items') <> 2
@@ -116,10 +125,31 @@ BEGIN
     RAISE EXCEPTION 'history second cursor page duplicated or skipped synthetic events: %', v_history;
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('somma_user_summary', 'somma_feed_summary', 'somma_history_page')
+      AND (
+        p.prosecdef
+        OR NOT coalesce(p.proconfig @> ARRAY['search_path=""']::text[], false)
+      )
+  ) THEN
+    RAISE EXCEPTION 'bounded client read function is not SECURITY INVOKER with an empty search_path';
+  END IF;
   IF has_function_privilege('anon', 'public.somma_user_summary()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.somma_feed_summary()', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'anon can execute a bounded client read function';
+     OR has_function_privilege('anon', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.somma_user_summary()', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.somma_feed_summary()', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'unauthorized role can execute a bounded client read function';
+  END IF;
+  IF NOT has_function_privilege('authenticated', 'public.somma_user_summary()', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.somma_feed_summary()', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.somma_history_page(text,timestamptz,uuid,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated is missing execute on a bounded client read function';
   END IF;
 END $bounded_read_tests$;
 
