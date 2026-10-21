@@ -44,6 +44,26 @@ async function main(){
   if(url.pathname==='/auth/v1/user'){if(method==='PUT'){recoveryUpdates++;return respond(user)}return respond(user)}
   if(!url.pathname.startsWith('/rest/v1/'))throw Error('Unexpected API path '+url.pathname);
   const table=url.pathname.split('/').pop();
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_feed_summary') {
+   const active=db.requests.filter(r=>r.status==='active'&&r.user_id!==uid&&(!r.expires_at||Date.parse(r.expires_at)>Date.now()));
+   active.sort((a,b)=>(a.goal_cents-a.raised_cents)-(b.goal_cents-b.raised_cents)||Date.parse(b.created_at)-Date.parse(a.created_at)||b.id.localeCompare(a.id));
+   return respond({active_count:active.length,completed_count:db.requests.filter(r=>r.status==='completed').length,closest:active[0]||null,almost:active[1]||null});
+  }
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_user_summary') {
+   const given=db.contributions.filter(c=>c.contributor_user_id===uid&&c.status==='simulated_confirmed');
+   const ownIds=new Set(db.requests.filter(r=>r.user_id===uid).map(r=>r.id));
+   const received=db.contributions.filter(c=>ownIds.has(c.request_id)&&c.status==='simulated_confirmed');
+   const monthStart=Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),1);
+   const latest=db.requests.filter(r=>r.user_id===uid).reduce((n,r)=>Math.max(n,Date.parse(r.created_at)),0);
+   return respond({helped:new Set(given.map(c=>db.requests.find(r=>r.id===c.request_id)?.user_id).filter(Boolean)).size,contributed_cents:given.reduce((n,c)=>n+c.amount_cents,0),received_count:received.length,received_month_cents:received.filter(c=>Date.parse(c.created_at)>=monthStart).reduce((n,c)=>n+c.amount_cents,0),next_request_at:latest?new Date(latest+7*86400000).toISOString():null});
+  }
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_history_page') {
+   return respond({items:[],has_more:false,next_at:null,next_id:null,next_kind:null});
+  }
+  if (method === 'HEAD' && table === 'notifications') {
+   const unread=db.notifications.filter(n=>n.user_id===uid&&n.read_at==null).length;
+   return route.fulfill({status:200,headers:{...headers,'content-range':`0-0/${unread}`},body:''});
+  }
   if(!db[table])return respond({code:'42P01',message:'Unknown table'},400);
   if(method==='GET'){
    let result=db[table].filter(row=>matches(row,url));const offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||99999);result=result.slice(offset,offset+limit);
