@@ -58,7 +58,18 @@ async function main(){
    return respond({helped:new Set(given.map(c=>db.requests.find(r=>r.id===c.request_id)?.user_id).filter(Boolean)).size,contributed_cents:given.reduce((n,c)=>n+c.amount_cents,0),received_count:received.length,received_month_cents:received.filter(c=>Date.parse(c.created_at)>=monthStart).reduce((n,c)=>n+c.amount_cents,0),next_request_at:latest?new Date(latest+7*86400000).toISOString():null});
   }
   if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_history_page') {
-   return respond({items:[],has_more:false,next_at:null,next_id:null,next_kind:null});
+   const events=[];
+   for(const r of db.requests.filter(r=>r.user_id===uid&&['all','request'].includes(body.p_kind||'all')))events.push({kind:'request',time:r.created_at,event_id:r.id,request:r,contribution:null,person_id:null});
+   for(const c of db.contributions.filter(c=>c.status==='simulated_confirmed')){
+    const r=db.requests.find(r=>r.id===c.request_id);if(!r)continue;
+    if(c.contributor_user_id===uid&&['all','helped'].includes(body.p_kind||'all'))events.push({kind:'helped',time:c.created_at,event_id:c.id,request:r,contribution:c,person_id:r.user_id});
+    if(r.user_id===uid&&['all','received'].includes(body.p_kind||'all'))events.push({kind:'received',time:c.created_at,event_id:c.id,request:r,contribution:c,person_id:c.contributor_user_id});
+   }
+   events.sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)||b.event_id.localeCompare(a.event_id)||b.kind.localeCompare(a.kind));
+   const beforeAt=body.p_before_at?Date.parse(body.p_before_at):null,beforeId=body.p_before_id,beforeKind=body.p_before_kind;
+   const eligible=beforeAt===null?events:events.filter(e=>{const d=Date.parse(e.time);return d<beforeAt||(d===beforeAt&&(e.event_id<beforeId||(e.event_id===beforeId&&e.kind<beforeKind)))});
+   const limit=Math.max(1,Math.min(Number(body.p_limit)||24,50)),items=eligible.slice(0,limit),last=items[items.length-1];
+   return respond({items,has_more:eligible.length>limit,next_at:last?.time||null,next_id:last?.event_id||null,next_kind:last?.kind||null});
   }
   if (method === 'HEAD' && table === 'notifications') {
    const unread=db.notifications.filter(n=>n.user_id===uid&&n.read_at==null).length;
