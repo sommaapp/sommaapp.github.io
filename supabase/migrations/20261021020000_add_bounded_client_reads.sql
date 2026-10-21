@@ -1,5 +1,11 @@
 -- Bounded, caller-scoped reads for the client. All functions run as the
 -- authenticated caller so existing row-level security remains authoritative.
+
+-- The notification badge and bulk read action both target only unread rows.
+CREATE INDEX IF NOT EXISTS notifications_unread_user_idx
+  ON public.notifications (user_id)
+  WHERE read_at IS NULL;
+
 CREATE OR REPLACE FUNCTION public.somma_user_summary()
 RETURNS jsonb
 LANGUAGE sql
