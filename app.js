@@ -256,7 +256,10 @@
     } finally {
       if (generation === state.generation) {
         state.history.loading = false;
-        if (state.view === 'history') renderHistory();
+        if (state.view === 'history') {
+          if (!state.history.loaded) loadHistory(true);
+          else renderHistory();
+        }
       }
     }
   }
@@ -266,7 +269,10 @@
     state.loading = true; updateSync();
     try {
       const page = await backend.feedPage(state.data.feedOffset);
-      page.rows.forEach(request => { if (!state.data.requests.some(item => item.id === request.id)) state.data.requests.push(request); });
+      page.rows.forEach(request => {
+        if (!state.data.requests.some(item => item.id === request.id)) state.data.requests.push(request);
+        if (!state.data.feedRequests.some(item => item.id === request.id)) state.data.feedRequests.push(request);
+      });
       (await backend.publicProfiles(page.rows.map(request => request.user_id))).forEach(profile => state.publicProfiles.set(profile.id, profile));
       state.data.feedHasMore = page.hasMore; state.data.feedOffset = page.nextOffset;
       if (state.view === 'help') renderHelp();
@@ -300,6 +306,7 @@
         const data = await backend.snapshot(userId);
         if (generation !== state.generation || state.session?.user.id !== userId) return;
         state.data = data;
+        state.data.feedRequests = data.requests.slice();
         state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
         state.publicProfiles = new Map(data.publicProfiles.map(profile => [profile.id, profile]));
         state.publicProfiles.set(userId, { id: userId, public_name: data.profile.public_name, level: data.profile.level });
@@ -459,7 +466,7 @@
   function renderHome() {
     const user = currentUser();
     $('#page-title').textContent = 'Início';
-    const active = state.data.requests.filter(request => effectiveStatus(request) === 'active');
+    const active = state.data.feedRequests.filter(request => effectiveStatus(request) === 'active');
     const primary = active[0] || state.data.feedSummary.closest;
     const closest = state.data.feedSummary.closest;
     const almost = closest && closest.id !== primary?.id ? closest : null;
@@ -477,7 +484,7 @@
 
   function renderHelp() {
     $('#page-title').textContent = 'Ajudar';
-    const requests = state.data.requests.filter(request => effectiveStatus(request) === 'active');
+    const requests = state.data.feedRequests.filter(request => effectiveStatus(request) === 'active');
     app.innerHTML = `<div class="content"><div class="section-head"><div><h2>Pedidos ativos</h2><p class="muted tiny">Escolha livremente quem você quer apoiar.</p></div></div><div class="legal-banner compact"><strong>Sem obrigação de retorno.</strong> Ajudar hoje não cria direito automático de receber amanhã.</div>${requests.length ? requests.map(requestCard).join('') : '<section class="empty-state"><div class="empty-icon">♡</div><h2>Nenhum pedido ativo</h2><p>Novos pedidos aparecerão aqui.</p></section>'}${state.data.feedHasMore ? '<button type="button" class="btn btn-secondary full top-gap" id="more-feed">Carregar mais pedidos</button>' : ''}</div>`;
   }
 
@@ -725,6 +732,7 @@
         }
         if (state.session?.user.id !== values.userId) return;
         if (!state.data.requests.some(request => request.id === published.id)) state.data.requests.unshift(published);
+        if (!state.data.feedRequests.some(request => request.id === published.id)) state.data.feedRequests.unshift(published);
         resetDraft();
         navigate('home');
         toast('Pedido publicado. Ele já pode receber contribuições simuladas.');
