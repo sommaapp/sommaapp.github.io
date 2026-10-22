@@ -9,11 +9,12 @@ const listeners={};const doc={hidden:false,querySelector:s=>get(s.slice(1)),quer
 const location={hash:'#home',pathname:'/',search:''};const entries=[{somma:true,view:'home',depth:0}];
 const history={state:entries[0],replaceState(s,_,url){entries[entries.length-1]=this.state=s;location.hash=url.slice(url.indexOf('#'))},pushState(s,_,url){entries.push(this.state=s);location.hash=url.slice(url.indexOf('#'))},back(){if(entries.length>1)entries.pop();this.state=entries.at(-1);listeners.popstate?.()}};
 const storage=new Map();const ctx={document:doc,location,history,navigator:{onLine:true},crypto:require('crypto').webcrypto,URLSearchParams,console,Date,Map,Set,HTMLFormElement:class{},Element:class{},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
-let feedPageResolver, notificationPageResolver, profileCalls=0;
+let feedPageResolver, notificationPageResolver, historyPageResolver, historyProfilesResolver, holdHistoryProfiles=false, profileCalls=0;
 const mockBackend={
  feedPage:()=>new Promise(resolve=>{feedPageResolver=resolve}),
  notificationPage:()=>new Promise(resolve=>{notificationPageResolver=resolve}),
-  publicProfiles:async ids=>{profileCalls++;return ids.map(id=>({id,public_name:'Old account'}))}
+ historyPage:()=>new Promise(resolve=>{historyPageResolver=resolve}),
+  publicProfiles:async ids=>{profileCalls++;if(holdHistoryProfiles)return new Promise(resolve=>{historyProfilesResolver=resolve});return ids.map(id=>({id,public_name:'Old account'}))}
 };
 ctx.window={SOMMA_CONFIG:{},SommaBackend:mockBackend,scrollTo(){},addEventListener:(n,fn)=>listeners[n]=fn};
 let src=fs.readFileSync(root+'/app.js','utf8');src=src.replace('  bootstrap();','  window.__test={state,parseCents,feeFor,summary,render,navigate,back,openContribution,clearAccount,saveIntent,effectiveStatus,errorMessage,readRoute,loadMoreFeed,loadMoreNotifications,loadHistory};');
@@ -59,6 +60,25 @@ notificationPageResolver({rows:[{id:'old-notification',user_id:uid}],hasMore:fal
 await notificationTask;
 assert.equal(oldNotifications.notifications.length,0);assert.equal(newNotifications.notifications.length,0);assert.equal(t.state.loading,true);
 checks++;console.log('PASS notification pagination ignores stale account response and preserves current loading state');
+
+// Regression: history page/profile responses must not mutate state after an account switch.
+const oldHistory={items:[],cursor:null,hasMore:true,loading:false,loaded:false};
+const newHistory={items:[],cursor:null,hasMore:true,loading:false,loaded:false};
+const oldHistoryData={requests:[]},newHistoryData={requests:[]};
+t.state.session={user:{id:uid}};t.state.generation=40;t.state.historyGeneration=50;t.state.historyTab='all';
+t.state.data=oldHistoryData;t.state.history=oldHistory;t.state.view='home';t.state.publicProfiles.clear();
+holdHistoryProfiles=true;
+const historyTask=t.loadHistory(true);
+historyPageResolver({items:[{kind:'request',event_id:'old-event',request:{id:'old-request',user_id:uid},person_id:uid}],has_more:false,next_at:null,next_id:null,next_kind:null});
+await Promise.resolve();await Promise.resolve();
+assert.equal(typeof historyProfilesResolver,'function');
+t.state.generation=41;t.state.historyGeneration=51;t.state.session={user:{id:other}};t.state.data=newHistoryData;t.state.history=newHistory;
+historyProfilesResolver([{id:uid,public_name:'Old account'}]);
+await historyTask;
+holdHistoryProfiles=false;
+assert.equal(newHistory.items.length,0);assert.equal(newHistory.loading,false);assert.equal(newHistory.loaded,false);
+assert.equal(newHistoryData.requests.length,0);assert.equal(t.state.publicProfiles.has(uid),false);
+checks++;console.log('PASS history pagination ignores stale account response after profile lookup');
 
 const ops=[];let insertError=null,found=null,findError=null;let method='select';
 class Query{constructor(table){this.table=table;this.where={};this.kind='select'}select(){return this}insert(v){this.kind='insert';this.values=v;return this}update(v){this.kind='update';this.values=v;return this}eq(k,v){this.where[k]=v;return this}is(k,v){this.where[k]=v;return this}order(){return this}range(){return this}then(a,b){return this.finish().then(a,b)}single(){return this.finish()}maybeSingle(){return this.finish()}async finish(){ops.push({table:this.table,kind:this.kind,values:this.values,where:this.where});if(this.table==='contributions'){if(this.kind==='insert')return {data:insertError?null:found,error:insertError};return {data:found,error:findError}}return {data:this.values,error:null}}}
