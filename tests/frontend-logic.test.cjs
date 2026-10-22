@@ -70,7 +70,7 @@ t.state.data=oldHistoryData;t.state.history=oldHistory;t.state.view='home';t.sta
 holdHistoryProfiles=true;
 const historyTask=t.loadHistory(true);
 historyPageResolver({items:[{kind:'request',event_id:'old-event',request:{id:'old-request',user_id:uid},person_id:uid}],has_more:false,next_at:null,next_id:null,next_kind:null});
-await Promise.resolve();await Promise.resolve();
+await new Promise(resolve=>setImmediate(resolve));
 assert.equal(typeof historyProfilesResolver,'function');
 t.state.generation=41;t.state.historyGeneration=51;t.state.session={user:{id:other}};t.state.data=newHistoryData;t.state.history=newHistory;
 historyProfilesResolver([{id:uid,public_name:'Old account'}]);
