@@ -9,8 +9,14 @@ const listeners={};const doc={hidden:false,querySelector:s=>get(s.slice(1)),quer
 const location={hash:'#home',pathname:'/',search:''};const entries=[{somma:true,view:'home',depth:0}];
 const history={state:entries[0],replaceState(s,_,url){entries[entries.length-1]=this.state=s;location.hash=url.slice(url.indexOf('#'))},pushState(s,_,url){entries.push(this.state=s);location.hash=url.slice(url.indexOf('#'))},back(){if(entries.length>1)entries.pop();this.state=entries.at(-1);listeners.popstate?.()}};
 const storage=new Map();const ctx={document:doc,location,history,navigator:{onLine:true},crypto:require('crypto').webcrypto,URLSearchParams,console,Date,Map,Set,HTMLFormElement:class{},Element:class{},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
-ctx.window={SOMMA_CONFIG:{},SommaBackend:null,scrollTo(){},addEventListener:(n,fn)=>listeners[n]=fn};
-let src=fs.readFileSync(root+'/app.js','utf8');src=src.replace('  bootstrap();','  window.__test={state,parseCents,feeFor,summary,render,navigate,back,openContribution,clearAccount,saveIntent,effectiveStatus,errorMessage,readRoute};');
+let feedPageResolver, notificationPageResolver, profileCalls=0;
+const mockBackend={
+ feedPage:()=>new Promise(resolve=>{feedPageResolver=resolve}),
+ notificationPage:()=>new Promise(resolve=>{notificationPageResolver=resolve}),
+ publicProfiles:async ids=>{profileCalls++;return ids.map(id=>({id,public_name:'Old account'}))}
+};
+ctx.window={SOMMA_CONFIG:{},SommaBackend:mockBackend,scrollTo(){},addEventListener:(n,fn)=>listeners[n]=fn};
+let src=fs.readFileSync(root+'/app.js','utf8');src=src.replace('  bootstrap();','  window.__test={state,parseCents,feeFor,summary,render,navigate,back,openContribution,clearAccount,saveIntent,effectiveStatus,errorMessage,readRoute,loadMoreFeed,loadMoreNotifications};');
 vm.runInNewContext(src,ctx);const t=ctx.window.__test;
 const uid='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 const reqId='33333333-3333-4333-8333-333333333333',ownId='44444444-4444-4444-8444-444444444444';
@@ -34,6 +40,26 @@ check('native history returns to the actual origin with UUID string',()=>{t.navi
 check('logout clears all private view state',()=>{t.clearAccount();assert.equal(t.state.session,null);assert.equal(t.state.data,null);assert.equal(get('app').innerHTML,'')});
 
 (async()=>{
+// Regression: a page response from an old account must not mutate the new account.
+const oldData={requests:[],feedRequests:[],feedHasMore:true,feedCursor:null,notifications:[],notificationsHasMore:true,notificationsCursor:null};
+const newData={requests:[],feedRequests:[],feedHasMore:true,feedCursor:null,notifications:[],notificationsHasMore:true,notificationsCursor:null};
+t.state.session={user:{id:uid}};t.state.generation=20;t.state.data=oldData;t.state.loading=false;
+const feedTask=t.loadMoreFeed();
+t.state.generation=21;t.state.session={user:{id:other}};t.state.data=newData;t.state.loading=true;
+feedPageResolver({rows:[{id:reqId,user_id:uid}],hasMore:false,nextCursor:null});
+await feedTask;
+assert.equal(oldData.requests.length,0);assert.equal(newData.requests.length,0);assert.equal(profileCalls,0);assert.equal(t.state.loading,true);
+checks++;console.log('PASS feed pagination ignores stale account response and preserves current loading state');
+
+const oldNotifications={...oldData,notifications:[]},newNotifications={...newData,notifications:[]};
+t.state.generation=30;t.state.session={user:{id:uid}};t.state.data=oldNotifications;t.state.loading=false;
+const notificationTask=t.loadMoreNotifications();
+t.state.generation=31;t.state.session={user:{id:other}};t.state.data=newNotifications;t.state.loading=true;
+notificationPageResolver({rows:[{id:'old-notification',user_id:uid}],hasMore:false,nextCursor:null});
+await notificationTask;
+assert.equal(oldNotifications.notifications.length,0);assert.equal(newNotifications.notifications.length,0);assert.equal(t.state.loading,true);
+checks++;console.log('PASS notification pagination ignores stale account response and preserves current loading state');
+
 const ops=[];let insertError=null,found=null,findError=null;let method='select';
 class Query{constructor(table){this.table=table;this.where={};this.kind='select'}select(){return this}insert(v){this.kind='insert';this.values=v;return this}update(v){this.kind='update';this.values=v;return this}eq(k,v){this.where[k]=v;return this}is(k,v){this.where[k]=v;return this}order(){return this}range(){return this}then(a,b){return this.finish().then(a,b)}single(){return this.finish()}maybeSingle(){return this.finish()}async finish(){ops.push({table:this.table,kind:this.kind,values:this.values,where:this.where});if(this.table==='contributions'){if(this.kind==='insert')return {data:insertError?null:found,error:insertError};return {data:found,error:findError}}return {data:this.values,error:null}}}
 const client={from:table=>new Query(table)};const win={SOMMA_CONFIG:{supabaseUrl:'https://example.invalid',supabasePublishableKey:'public'},supabase:{createClient:()=>client}};
