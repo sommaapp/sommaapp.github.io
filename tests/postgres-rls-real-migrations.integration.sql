@@ -396,7 +396,8 @@ DECLARE
   v_failed boolean := false;
 BEGIN
   SELECT id INTO v_request FROM public.requests
-  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    AND description = 'Synthetic request Bravo';
 
   BEGIN
     INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
@@ -409,7 +410,8 @@ BEGIN
 
   v_failed := false;
   SELECT id INTO v_request FROM public.requests
-  WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  WHERE user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    AND description = 'Synthetic request Alpha';
   BEGIN
     INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
     VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100);
@@ -422,7 +424,8 @@ BEGIN
   -- Non-positive amounts must be rejected by the production validation trigger.
   v_failed := false;
   SELECT id INTO v_request FROM public.requests
-  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    AND description = 'Synthetic request Bravo';
   BEGIN
     INSERT INTO public.contributions (request_id, contributor_user_id, amount_cents)
     VALUES (v_request, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 0);
@@ -536,7 +539,8 @@ INSERT INTO public.contributions
 SELECT id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100,
        '11111111-1111-4111-8111-111111111111'
 FROM public.requests
-WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    AND description = 'Synthetic request Bravo';
 
 DO $test$
 DECLARE
@@ -544,7 +548,8 @@ DECLARE
   v_failed boolean := false;
 BEGIN
   SELECT id INTO v_request FROM public.requests
-  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  WHERE user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    AND description = 'Synthetic request Bravo';
   BEGIN
     INSERT INTO public.contributions
       (request_id, contributor_user_id, amount_cents, idempotency_key)
