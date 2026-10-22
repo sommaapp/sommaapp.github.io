@@ -294,10 +294,10 @@ BEGIN
   IF n <> 1 THEN RAISE EXCEPTION 'Alpha profile isolation failed: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests;
-  IF n <> 3 THEN RAISE EXCEPTION 'Alpha should see own requests and Bravo active request only: %', n; END IF;
+  IF n <> 4 THEN RAISE EXCEPTION 'Alpha should see own requests and requests they contributed to, including completed history: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.contributions;
-  IF n <> 3 THEN RAISE EXCEPTION 'Alpha should see own and own-request contributions only: %', n; END IF;
+  IF n <> 4 THEN RAISE EXCEPTION 'Alpha should see own and own-request contributions only: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests
   WHERE id IN ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','ffffffff-ffff-4fff-8fff-ffffffffffff');
@@ -360,10 +360,10 @@ BEGIN
   IF n <> 1 THEN RAISE EXCEPTION 'Bravo profile isolation failed: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests;
-  IF n <> 2 THEN RAISE EXCEPTION 'Bravo should see own and Alpha active requests only: %', n; END IF;
+  IF n <> 3 THEN RAISE EXCEPTION 'Bravo should see own requests and requests they contributed to, including completed history: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.contributions;
-  IF n <> 3 THEN RAISE EXCEPTION 'Bravo should see own and own-request contributions only: %', n; END IF;
+  IF n <> 4 THEN RAISE EXCEPTION 'Bravo should see own and own-request contributions only: %', n; END IF;
 
   SELECT count(*) INTO n FROM public.requests
   WHERE id IN ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','ffffffff-ffff-4fff-8fff-ffffffffffff');
