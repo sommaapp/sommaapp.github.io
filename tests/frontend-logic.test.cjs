@@ -64,7 +64,7 @@ checks++;console.log('PASS notification pagination ignores stale account respons
 // History: invalidate the account while the public-profile lookup is pending.
 const historyData={requests:[],history:[]};
 const historyState={items:[],cursor:null,hasMore:true,loading:false,loaded:false};
-t.state.session={user:{id:uid}};t.state.generation=40;t.state.data=historyData;t.state.history=historyState;t.state.historyGeneration=7;t.state.historyTab='all';t.state.view='history';t.state.historyReloadPending=false;
+t.state.session={user:{id:uid}};t.state.generation=40;t.state.data=historyData;t.state.history=historyState;t.state.historyGeneration=7;t.state.historyTab='all';t.state.view='home';t.state.historyReloadPending=false;
 const historyTask=t.loadHistory();
 historyPageResolver({items:[{request:{id:reqId,user_id:uid},person_id:uid}],next_at:'2026-01-01',next_id:reqId,next_kind:'request',has_more:true});
 await Promise.resolve();await Promise.resolve();
