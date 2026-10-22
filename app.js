@@ -235,34 +235,40 @@
   }
 
   async function loadHistory(reset = false) {
-    if (!hasSession() || state.history.loading) return;
+    if (!hasSession() || state.history.loading || !state.data) return;
     if (reset) {
       state.historyGeneration += 1;
       state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
     }
     if (state.history.loaded && !state.history.hasMore) return;
-    const generation = state.generation, historyGeneration = state.historyGeneration, kind = state.historyTab;
-    state.history.loading = true;
+    const generation = state.generation, historyGeneration = state.historyGeneration;
+    const userId = state.session.user.id, kind = state.historyTab;
+    const data = state.data, history = state.history, cursor = history.cursor;
+    const isCurrent = () => generation === state.generation
+      && historyGeneration === state.historyGeneration && kind === state.historyTab
+      && state.session?.user.id === userId && state.data === data && state.history === history;
+    history.loading = true;
     if (state.view === 'history') renderHistory();
     try {
-      const page = await backend.historyPage(kind, state.history.cursor);
-      if (generation !== state.generation || historyGeneration !== state.historyGeneration || kind !== state.historyTab) return;
+      const page = await backend.historyPage(kind, cursor);
+      if (!isCurrent()) return;
       const rows = page.items || [];
-      state.history.items.push(...rows);
+      history.items.push(...rows);
       rows.forEach(item => {
-        if (item.request && !state.data.requests.some(request => request.id === item.request.id)) state.data.requests.push(item.request);
+        if (item.request && !data.requests.some(request => request.id === item.request.id)) data.requests.push(item.request);
       });
-      (await backend.publicProfiles(rows.flatMap(item => [item.person_id, item.request?.user_id, item.contribution?.contributor_user_id]).filter(Boolean)))
-        .forEach(profile => state.publicProfiles.set(profile.id, profile));
-      state.history.cursor = page.next_at && page.next_id && page.next_kind
+      const profiles = await backend.publicProfiles(rows.flatMap(item => [item.person_id, item.request?.user_id, item.contribution?.contributor_user_id]).filter(Boolean));
+      if (!isCurrent()) return;
+      profiles.forEach(profile => state.publicProfiles.set(profile.id, profile));
+      history.cursor = page.next_at && page.next_id && page.next_kind
         ? { at: page.next_at, id: page.next_id, kind: page.next_kind } : null;
-      state.history.hasMore = Boolean(page.has_more);
-      state.history.loaded = true;
+      history.hasMore = Boolean(page.has_more);
+      history.loaded = true;
     } catch (error) {
-      if (generation === state.generation) toast(errorMessage(error));
+      if (isCurrent()) toast(errorMessage(error));
     } finally {
-      if (generation === state.generation && historyGeneration === state.historyGeneration) {
-        state.history.loading = false;
+      if (isCurrent()) {
+        history.loading = false;
         if (state.historyReloadPending) {
           state.historyReloadPending = false;
           loadHistory(true);
