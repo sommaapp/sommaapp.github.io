@@ -274,32 +274,50 @@
   }
 
   async function loadMoreFeed() {
-    if (!state.data?.feedHasMore || state.loading) return;
+    if (!state.data?.feedHasMore || state.loading || !hasSession()) return;
+    const data = state.data, userId = state.session.user.id, generation = state.generation;
+    const cursor = data.feedCursor;
     state.loading = true; updateSync();
+    const isCurrent = () => generation === state.generation
+      && state.session?.user.id === userId && state.data === data;
     try {
-      const page = await backend.feedPage(state.session.user.id, state.data.feedCursor);
+      const page = await backend.feedPage(userId, cursor);
+      if (!isCurrent()) return;
+      const profiles = await backend.publicProfiles(page.rows.map(request => request.user_id));
+      if (!isCurrent()) return;
       page.rows.forEach(request => {
-        if (!state.data.requests.some(item => item.id === request.id)) state.data.requests.push(request);
-        if (!state.data.feedRequests.some(item => item.id === request.id)) state.data.feedRequests.push(request);
+        if (!data.requests.some(item => item.id === request.id)) data.requests.push(request);
+        if (!data.feedRequests.some(item => item.id === request.id)) data.feedRequests.push(request);
       });
-      (await backend.publicProfiles(page.rows.map(request => request.user_id))).forEach(profile => state.publicProfiles.set(profile.id, profile));
-      state.data.feedHasMore = page.hasMore; state.data.feedCursor = page.nextCursor;
+      profiles.forEach(profile => state.publicProfiles.set(profile.id, profile));
+      data.feedHasMore = page.hasMore; data.feedCursor = page.nextCursor;
       if (state.view === 'help') renderHelp();
-    } catch (error) { toast(errorMessage(error)); }
-    finally { state.loading = false; updateSync(); }
+    } catch (error) {
+      if (isCurrent()) toast(errorMessage(error));
+    } finally {
+      if (isCurrent()) { state.loading = false; updateSync(); }
+    }
   }
 
   async function loadMoreNotifications() {
-    if (!state.data?.notificationsHasMore || state.loading) return;
+    if (!state.data?.notificationsHasMore || state.loading || !hasSession()) return;
+    const data = state.data, userId = state.session.user.id, generation = state.generation;
+    const cursor = data.notificationsCursor;
     state.loading = true; updateSync();
+    const isCurrent = () => generation === state.generation
+      && state.session?.user.id === userId && state.data === data;
     try {
-      const page = await backend.notificationPage(state.session.user.id, state.data.notificationsCursor);
-      const known = new Set(state.data.notifications.map(item => item.id));
-      state.data.notifications.push(...page.rows.filter(item => !known.has(item.id)));
-      state.data.notificationsHasMore = page.hasMore; state.data.notificationsCursor = page.nextCursor;
+      const page = await backend.notificationPage(userId, cursor);
+      if (!isCurrent()) return;
+      const known = new Set(data.notifications.map(item => item.id));
+      data.notifications.push(...page.rows.filter(item => !known.has(item.id)));
+      data.notificationsHasMore = page.hasMore; data.notificationsCursor = page.nextCursor;
       if (state.view === 'notifications') renderNotifications();
-    } catch (error) { toast(errorMessage(error)); }
-    finally { state.loading = false; updateSync(); }
+    } catch (error) {
+      if (isCurrent()) toast(errorMessage(error));
+    } finally {
+      if (isCurrent()) { state.loading = false; updateSync(); }
+    }
   }
 
   async function loadData({ initial = false } = {}) {
