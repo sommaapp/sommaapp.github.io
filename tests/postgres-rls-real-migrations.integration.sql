@@ -216,8 +216,8 @@ BEGIN
     RAISE EXCEPTION 'feed summary exposed a column outside its explicit projection: %', v_feed;
   END IF;
 
-  v_history := public.somma_history_page('all', NULL, NULL, 4);
-  IF jsonb_array_length(v_history->'items') <> 4
+  v_history := public.somma_history_page('all', NULL, NULL, 5);
+  IF jsonb_array_length(v_history->'items') <> 5
      OR NOT (v_history->>'has_more')::boolean THEN
     RAISE EXCEPTION 'history first cursor page is incorrect: %', v_history;
   END IF;
@@ -232,7 +232,7 @@ BEGIN
   WHERE item->>'event_id' = '12121212-1212-4121-8121-121212121212';
   v_history := public.somma_history_page(
     'all', (v_history->>'next_at')::timestamptz,
-    (v_history->>'next_id')::uuid, 4, v_history->>'next_kind'
+    (v_history->>'next_id')::uuid, 5, v_history->>'next_kind'
   );
   IF jsonb_array_length(v_history->'items') <> 1
      OR (v_history->>'has_more')::boolean
