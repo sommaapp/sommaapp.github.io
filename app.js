@@ -162,6 +162,7 @@
     });
     if (clear) feedback('#auth-feedback', '');
     $('#resend-confirmation').classList.add('hidden');
+    $('#confirmed-signup-login').classList.add('hidden');
   }
 
   function clearAccount() {
@@ -729,6 +730,7 @@
           feedback('#auth-feedback', 'Confira seu e-mail para confirmar o cadastro. Depois, entre com seu e-mail e sua senha. Verifique também a caixa de spam.', true);
           $('#login-email').value = email;
           $('#resend-confirmation').classList.remove('hidden');
+          $('#confirmed-signup-login').classList.remove('hidden');
         }
       } else if (form.id === 'forgot-form') {
         const { error } = await auth.resetPasswordForEmail($('#forgot-email').value.trim().toLowerCase(), { redirectTo: config.siteUrl });
