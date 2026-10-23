@@ -79,3 +79,17 @@ Foi revisado `backend.js` na branch de auditoria:
 - Não foi encontrado no arquivo inspecionado uso de `upsert`, escrita direta em status/contadores ou chave service-role.
 
 Nenhuma falha nova e demonstrável foi identificada nessa leitura estática, portanto não foi alterada lógica de produção nem introduzida uma correção especulativa. Os caminhos ainda precisam ser exercitados no Supabase Auth/API real antes do lançamento.
+
+
+### Atualização da auditoria — 23/10/2026 (HEAD 484d2a31)
+
+- HEAD da branch `test/rls-user-isolation`: `484d2a31d4c8b1d9e3f7ebaf4cb9efe856ec6c09`.
+- Os três workflows deste HEAD terminaram com sucesso:
+  - [Frontend logic and browser tests](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39997740457)
+  - [RLS user isolation integration](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39997740437)
+  - [Migrations on disposable PostgreSQL](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39997740414)
+- A cobertura de frontend agora verifica que os campos de senha de cadastro e recuperação exigem mínimo de 12 caracteres. Isso valida o comportamento do HTML/harness; não substitui validação do servidor Auth.
+- O PR #8 segue aberto, em rascunho e não mesclado. Nenhum deploy ou alteração de produção foi executado.
+- Nova consulta somente leitura ao Security Advisor confirmou `auth_leaked_password_protection` como WARN. A proteção contra senhas vazadas continua desabilitada; os cinco avisos `unused_index` são informativos e não justificam remoção sem análise de carga.
+- O histórico de migrações em produção continua registrando apenas `20261016214851`, `20261016214904`, `20261016214956` e `20261017001333`. As quatro migrações posteriores permanecem fora de produção.
+- Limitação pendente: os testes automatizados usam fixtures de navegador e PostgreSQL descartável com compatibilidade mínima de Auth. Ainda não comprovam todos os fluxos com JWT/Supabase Auth, entrega real de e-mail, nem comportamento sob carga.
