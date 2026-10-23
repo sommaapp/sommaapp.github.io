@@ -66,3 +66,16 @@ A RPC `somma_user_summary()` agora inclui `supported_requests`, contando pedidos
 - O conjunto de testes usa PostgreSQL descartável e uma camada de compatibilidade de Auth; não comprova todos os comportamentos do Supabase Auth real, JWT, e-mail ou API REST em produção.
 - Os cinco índices marcados anteriormente como não utilizados não devem ser removidos sem evidência de carga e análise dos planos de consulta.
 - Nenhuma alteração foi mesclada ou publicada. Manter o PR em draft até concluir validações e revisar os limites descritos.
+
+
+### Revisão dos caminhos de escrita no cliente — 23/10/2026
+
+Foi revisado `backend.js` na branch de auditoria:
+
+- O cliente usa a chave publicável do Supabase, não uma chave administrativa/service-role.
+- As escritas do cliente estão limitadas a criar pedidos, inserir contribuições, registrar denúncias, alterar o próprio nome e marcar notificações como lidas.
+- Os métodos que recebem `userId` filtram pelo identificador informado, mas isso não é considerado uma fronteira de segurança: a autorização efetiva precisa continuar sendo imposta por RLS, grants por coluna e triggers no banco.
+- A criação de contribuições reutiliza a mesma chave de idempotência após falha de resposta e procura a contribuição original antes de relatar erro; não cria automaticamente uma nova chave de tentativa.
+- Não foi encontrado no arquivo inspecionado uso de `upsert`, escrita direta em status/contadores ou chave service-role.
+
+Nenhuma falha nova e demonstrável foi identificada nessa leitura estática, portanto não foi alterada lógica de produção nem introduzida uma correção especulativa. Os caminhos ainda precisam ser exercitados no Supabase Auth/API real antes do lançamento.
