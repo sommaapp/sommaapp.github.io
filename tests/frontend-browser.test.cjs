@@ -35,6 +35,7 @@ async function main(){
   }
   if(url.hostname!=='sxwsfgotsztetnawofyx.supabase.co')throw Error('Unexpected external request '+url.origin);
   requests.push(method+' '+url.pathname);
+  if(['/auth/v1/signup','/auth/v1/recover','/auth/v1/resend'].includes(url.pathname))authRedirects.push({path:url.pathname,redirectTo:url.searchParams.get('redirect_to')});
   if(method==='OPTIONS')return respond({},204);
   const body=req.postData()?JSON.parse(req.postData()):{};
   if(url.pathname==='/auth/v1/token')return body.password==='wrong-password'?respond({code:'invalid_credentials',msg:'Invalid login credentials'},400):respond(session());
