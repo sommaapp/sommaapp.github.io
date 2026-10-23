@@ -38,3 +38,31 @@ A RPC `somma_user_summary()` agora inclui `supported_requests`, contando pedidos
 2. Continuar a revisão de RLS, autorização e escalabilidade, com evidência concreta antes de propor índices ou alterações.
 3. Confirmar o comportamento operacional de Auth/e-mail e PWA no ambiente de disponibilização antes de considerar o lançamento.
 4. Registrar as limitações de dispositivos reais que não tenham sido testados.
+
+
+## Atualização da auditoria — 23/10/2026
+
+### Estado confirmado do PR
+
+- O PR #8 permanece aberto, em rascunho e não mesclado: https://github.com/sommaapp/sommaapp.github.io/pull/8
+- HEAD verificado: `26a1e9426d6bffeb5aff47777ea33245bdd0ef86`.
+- Os três workflows deste HEAD terminaram com sucesso:
+  - [Frontend logic and browser tests](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39794137913)
+  - [RLS user isolation integration](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39794137689)
+  - [Migrations on disposable PostgreSQL](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39794137867)
+
+### Verificações somente leitura no Supabase
+
+- As oito tabelas de aplicação no schema `public` continuam com RLS habilitada.
+- Não foi encontrada concessão de acesso direto às tabelas públicas para o papel `anon` na consulta de ACLs realizada.
+- `authenticated` não possui privilégios gerais de escrita em nível de tabela nas tabelas de aplicação examinadas; as operações necessárias usam concessões mais estreitas por coluna e políticas RLS.
+- As funções `SECURITY DEFINER` inspecionadas no schema `private` têm `search_path=""`. A única função desse grupo com execução concedida a `authenticated` é `private.can_read_request(uuid)`, usada pela política de leitura de pedidos. As demais funções de gatilho/validação não aparecem executáveis diretamente por `anon` ou `authenticated`.
+- O schema `private` concede `USAGE` a `authenticated`; isso, isoladamente, não prova vulnerabilidade, pois a execução de cada função depende de ACL própria. A concessão é necessária para resolver a função auxiliar usada pela política RLS.
+- Não foi feita alteração de esquema, política, privilégio ou dado no banco de produção durante essas verificações.
+
+### Alertas e limites ainda abertos
+
+- O Security Advisor continua sinalizando `auth_leaked_password_protection` (proteção contra senhas vazadas desabilitada). O alerta precisa ser resolvido na configuração de Supabase Auth e confirmado por nova leitura do Advisor; os testes SQL não corrigem esse ajuste.
+- O conjunto de testes usa PostgreSQL descartável e uma camada de compatibilidade de Auth; não comprova todos os comportamentos do Supabase Auth real, JWT, e-mail ou API REST em produção.
+- Os cinco índices marcados anteriormente como não utilizados não devem ser removidos sem evidência de carga e análise dos planos de consulta.
+- Nenhuma alteração foi mesclada ou publicada. Manter o PR em draft até concluir validações e revisar os limites descritos.
