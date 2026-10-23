@@ -99,7 +99,7 @@
     const messages = {
       invalid_credentials: 'E-mail ou senha incorretos.',
       email_not_confirmed: 'Confirme seu e-mail antes de entrar. Verifique também a caixa de spam.',
-      weak_password: 'Escolha uma senha mais forte, com pelo menos 8 caracteres.',
+      weak_password: 'Escolha uma senha mais forte, com pelo menos 12 caracteres e os requisitos de complexidade.',
       same_password: 'Escolha uma senha diferente da senha atual.',
       email_address_invalid: 'Confira o endereço de e-mail informado.',
       email_address_not_authorized: 'O envio de e-mails de acesso ainda precisa ser habilitado para este endereço pela Somma.',
