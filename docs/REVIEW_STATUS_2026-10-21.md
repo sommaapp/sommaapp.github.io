@@ -93,3 +93,18 @@ Nenhuma falha nova e demonstrável foi identificada nessa leitura estática, por
 - Nova consulta somente leitura ao Security Advisor confirmou `auth_leaked_password_protection` como WARN. A proteção contra senhas vazadas continua desabilitada; os cinco avisos `unused_index` são informativos e não justificam remoção sem análise de carga.
 - O histórico de migrações em produção continua registrando apenas `20261016214851`, `20261016214904`, `20261016214956` e `20261017001333`. As quatro migrações posteriores permanecem fora de produção.
 - Limitação pendente: os testes automatizados usam fixtures de navegador e PostgreSQL descartável com compatibilidade mínima de Auth. Ainda não comprovam todos os fluxos com JWT/Supabase Auth, entrega real de e-mail, nem comportamento sob carga.
+
+
+### Atualização da auditoria — 24/10/2026 (HEAD de53b6df)
+
+- HEAD da branch `test/rls-user-isolation`: `de53b6df64b32fd69e80dacad081c4247e0fca31`.
+- Os três workflows deste HEAD terminaram com sucesso:
+  - [Frontend logic and browser tests](https://github.com/sommaapp/sommaapp.github.io/actions/runs/40132941537)
+  - [RLS user isolation integration](https://github.com/sommaapp/sommaapp.github.io/actions/runs/40132941544)
+  - [Migrations on disposable PostgreSQL](https://github.com/sommaapp/sommaapp.github.io/actions/runs/40132941543)
+- O teste de navegador cobre agora a ação “Já confirmei o e-mail — entrar”, redirecionamentos de cadastro/recuperação e a sequência entre formulários.
+- Validação manual relatada pelo usuário: cadastro iniciado no site publicado, confirmação pelo telefone, recuperação de senha e login bem-sucedido no notebook. Isso demonstra um fluxo Auth real funcional, mas não comprova entrega consistente de todos os e-mails nem sincronização de dados entre dois dispositivos.
+- Incidente observado: tentativas repetidas de cadastro geraram eventos `user_repeated_signup`; houve um evento de link de verificação inválido/expirado, e registros de confirmação bem-sucedida. Recomendação: evitar novas tentativas de cadastro com o mesmo endereço; preferir login/recuperação de senha.
+- A interface publicada ainda exibe texto antigo de senha mínima de 8 caracteres, enquanto a versão na branch exige 12. A correção ainda não foi mesclada nem implantada.
+- O PR #8 segue aberto, draft e não mesclado. Nenhuma migração, alteração de configuração ou deploy de produção foi executado durante esta atualização.
+- Limitações restantes: confirmar sincronização real de dados entre notebook e celular; investigar a entrega de e-mails/SMTP e configuração de redirects; confirmar a política efetiva de senha no Auth; a proteção contra senhas vazadas permanece como alerta previamente identificado no Security Advisor.
