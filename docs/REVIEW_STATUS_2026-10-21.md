@@ -108,3 +108,16 @@ Nenhuma falha nova e demonstrável foi identificada nessa leitura estática, por
 - A interface publicada ainda exibe texto antigo de senha mínima de 8 caracteres, enquanto a versão na branch exige 12. A correção ainda não foi mesclada nem implantada.
 - O PR #8 segue aberto, draft e não mesclado. Nenhuma migração, alteração de configuração ou deploy de produção foi executado durante esta atualização.
 - Limitações restantes: confirmar sincronização real de dados entre notebook e celular; investigar a entrega de e-mails/SMTP e configuração de redirects; confirmar a política efetiva de senha no Auth; a proteção contra senhas vazadas permanece como alerta previamente identificado no Security Advisor.
+
+
+### Atualização da auditoria — 24/10/2026 (verificação complementar)
+
+- O commit `2d8c81229985758e49f552951929a2d94af745d5` mantém os três workflows verdes:
+  - [Frontend logic and browser tests](https://github.com/sommaapp/sommaapp.github.io/actions/runs/40133598066)
+  - [RLS user isolation integration](https://github.com/sommaapp/sommaapp.github.io/actions/runs/40133598055)
+  - [Migrations on disposable PostgreSQL](https://github.com/sommaapp/sommaapp.github.io/actions/runs/40133598048)
+- Nova consulta ao Security Advisor confirmou que `auth_leaked_password_protection` continua como WARN. A documentação oficial atual do Supabase informa que leaked password protection está disponível no plano Pro ou superior: https://supabase.com/docs/guides/auth/password-security.
+- Comparação de `index.html` confirmou que `main` ainda tem `minlength="8"` e placeholder “Pelo menos 8 caracteres”, enquanto `test/rls-user-isolation` usa `minlength="12"` e placeholder “Pelo menos 12 caracteres”. Não foi realizado merge ou deploy.
+- A consulta de performance mantém cinco avisos informativos `unused_index`; nenhuma remoção foi proposta sem evidência de carga.
+- PR #8 permanece aberto, em draft e não mesclado. Não foram feitas alterações no banco, Auth, plano, configurações de produção ou deploy.
+- Próximos bloqueios: decidir se o custo do plano necessário para proteção contra senhas vazadas é aceitável; validar sincronização entre dispositivos reais; revisar entrega de e-mail e redirects; só então avaliar merge/deploy com autorização explícita.
