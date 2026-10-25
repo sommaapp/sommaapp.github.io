@@ -121,3 +121,13 @@ Nenhuma falha nova e demonstrável foi identificada nessa leitura estática, por
 - A consulta de performance mantém cinco avisos informativos `unused_index`; nenhuma remoção foi proposta sem evidência de carga.
 - PR #8 permanece aberto, em draft e não mesclado. Não foram feitas alterações no banco, Auth, plano, configurações de produção ou deploy.
 - Próximos bloqueios: decidir se o custo do plano necessário para proteção contra senhas vazadas é aceitável; validar sincronização entre dispositivos reais; revisar entrega de e-mail e redirects; só então avaliar merge/deploy com autorização explícita.
+
+
+### Decisão de gestão de risco — 24/10/2026
+
+- Decisão do responsável pelo projeto: manter temporariamente o plano Supabase atual e aceitar formalmente, como risco conhecido e limitado, que a proteção nativa contra senhas vazadas (`auth_leaked_password_protection`) permanece desabilitada até a aquisição do plano Pro.
+- A decisão não equivale a considerar o risco corrigido. O alerta do Security Advisor permanece aberto e deve ser reavaliado após o upgrade e a ativação da configuração.
+- Controles compensatórios enquanto a limitação persistir: manter política mínima de 12 caracteres e complexidade na configuração efetiva de Auth; monitorar o Security Advisor; não publicar amplamente nem considerar a auditoria encerrada; recomendar senhas únicas e gerenciador de senhas aos usuários.
+- Confirmar no painel a política efetiva de Auth, pois o HTML da branch não garante por si só a política do servidor. A interface pública `main` ainda indica 8 caracteres até merge/deploy autorizado.
+- O plano e as configurações de Auth não foram alterados. Nenhum custo foi assumido. A decisão de aceitar temporariamente o risco foi registrada para revisão futura quando o plano Pro for adquirido.
+- Condição para encerramento: após upgrade, ativar a proteção contra senhas vazadas, conferir mínimo/complexidade, executar teste controlado de senha conhecida como comprometida sem expor credenciais reais, e confirmar que o alerta desapareceu no Security Advisor.
