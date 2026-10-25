@@ -14,7 +14,7 @@
   let legacyCredentialsCleaned = false;
   const state = {
     session: null, data: null, publicProfiles: new Map(), view: 'home', detailId: null,
-    historyTab: 'all', requestStep: 1,
+    historyTab: 'all', historyGeneration: 0, history: { items: [], cursor: null, hasMore: true, loading: false, loaded: false }, requestStep: 1,
     draft: { value: '', category: '', description: '', durationHours: 48 },
     loading: false, loadedAt: 0, stale: false, generation: 0, loadPromise: null,
     recovery: false, confirmEmail: '', authMode: 'login',
@@ -29,7 +29,7 @@
   const fullDate = value => value ? new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
   const joinedDate = value => value ? new Date(value).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : '—';
   const currentUser = () => state.data?.profile;
-  const requestById = id => state.data?.requests.find(request => request.id === id);
+  const requestById = id => state.data?.requests.find(request => request.id === id) || (state.data?.activeOwn?.id === id ? state.data.activeOwn : null) || (state.data?.feedSummary?.closest?.id === id ? state.data.feedSummary.closest : null) || (state.data?.feedSummary?.almost?.id === id ? state.data.feedSummary.almost : null) || state.history.items.find(item => item.request?.id === id)?.request || null;
   const personName = id => state.publicProfiles.get(id)?.public_name || 'Membro Somma';
   const levelName = code => state.data?.levels.find(level => level.code === code)?.display_name || 'Em análise';
   const hasSession = () => Boolean(state.session?.user?.id);
@@ -65,28 +65,16 @@
   }
 
   function summary() {
-    const userId = state.session.user.id;
-    const requests = state.data.requests;
-    const own = requests.filter(request => request.user_id === userId);
-    const ownIds = new Set(own.map(request => request.id));
-    const confirmed = state.data.contributions.filter(item => item.status === 'simulated_confirmed');
-    const given = confirmed.filter(item => item.contributor_user_id === userId);
-    const received = confirmed.filter(item => ownIds.has(item.request_id));
-    const now = new Date();
-    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-    const receivedMonth = received.filter(item => Date.parse(item.created_at) >= monthStart).reduce((sum, item) => sum + item.amount_cents, 0);
-    const helpedUsers = new Set(given.map(item => requestById(item.request_id)?.user_id).filter(Boolean));
-    const latest = own.reduce((last, request) => Math.max(last, Date.parse(request.created_at)), 0);
+    const metrics = state.data.metrics || {};
+    const receivedMonth = Number(metrics.received_month_cents || 0);
+    const activeOwn = state.data.activeOwn && effectiveStatus(state.data.activeOwn) === 'active' ? state.data.activeOwn : null;
     return {
-      own, given, received, receivedMonth,
-      activeOwn: own.find(request => effectiveStatus(request) === 'active'),
-      helped: helpedUsers.size,
-      contributed: given.reduce((sum, item) => sum + item.amount_cents, 0),
-      nextRequestAt: latest ? latest + 7 * 86400000 : 0,
+      receivedCount: Number(metrics.received_count || 0), receivedMonth, activeOwn,
+      helped: Number(metrics.helped || 0), contributed: Number(metrics.contributed_cents || 0),
+      nextRequestAt: Date.parse(metrics.next_request_at || '') || 0,
       available: currentUser().period_limit_cents === null ? null : Math.max(0, currentUser().period_limit_cents - receivedMonth)
     };
   }
-
   function toast(message) {
     const element = $('#toast');
     element.textContent = message;
@@ -111,7 +99,7 @@
     const messages = {
       invalid_credentials: 'E-mail ou senha incorretos.',
       email_not_confirmed: 'Confirme seu e-mail antes de entrar. Verifique também a caixa de spam.',
-      weak_password: 'Escolha uma senha mais forte, com pelo menos 8 caracteres.',
+      weak_password: 'Escolha uma senha mais forte, com pelo menos 12 caracteres e os requisitos de complexidade.',
       same_password: 'Escolha uma senha diferente da senha atual.',
       email_address_invalid: 'Confira o endereço de e-mail informado.',
       email_address_not_authorized: 'O envio de e-mails de acesso ainda precisa ser habilitado para este endereço pela Somma.',
@@ -174,12 +162,16 @@
     });
     if (clear) feedback('#auth-feedback', '');
     $('#resend-confirmation').classList.add('hidden');
+    $('#confirmed-signup-login').classList.add('hidden');
   }
 
   function clearAccount() {
     state.generation += 1;
     state.session = null;
     state.data = null;
+    state.historyGeneration += 1;
+    state.historyReloadPending = false;
+    state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
     state.publicProfiles = new Map();
     state.loadedAt = 0;
     state.loading = false;
@@ -233,6 +225,108 @@
     if (state.modalRequestId) updateContributionSummary();
   }
 
+  async function ensureRequest(id) {
+    const existing = requestById(id);
+    if (existing) return existing;
+    const request = await backend.getRequest(id);
+    if (!request || !state.data) return null;
+    if (!state.data.requests.some(item => item.id === id)) state.data.requests.push(request);
+    (await backend.publicProfiles([request.user_id])).forEach(profile => state.publicProfiles.set(profile.id, profile));
+    return request;
+  }
+
+  async function loadHistory(reset = false) {
+    if (!hasSession() || state.history.loading || !state.data) return;
+    if (reset) {
+      state.historyGeneration += 1;
+      state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
+    }
+    if (state.history.loaded && !state.history.hasMore) return;
+    const generation = state.generation, historyGeneration = state.historyGeneration;
+    const userId = state.session.user.id, kind = state.historyTab;
+    const data = state.data, history = state.history, cursor = history.cursor;
+    const isCurrent = () => generation === state.generation
+      && historyGeneration === state.historyGeneration && kind === state.historyTab
+      && state.session?.user.id === userId && state.data === data && state.history === history;
+    history.loading = true;
+    if (state.view === 'history') renderHistory();
+    try {
+      const page = await backend.historyPage(kind, cursor);
+      if (!isCurrent()) return;
+      const rows = page.items || [];
+      history.items.push(...rows);
+      rows.forEach(item => {
+        if (item.request && !data.requests.some(request => request.id === item.request.id)) data.requests.push(item.request);
+      });
+      const profiles = await backend.publicProfiles(rows.flatMap(item => [item.person_id, item.request?.user_id, item.contribution?.contributor_user_id]).filter(Boolean));
+      if (!isCurrent()) return;
+      profiles.forEach(profile => state.publicProfiles.set(profile.id, profile));
+      history.cursor = page.next_at && page.next_id && page.next_kind
+        ? { at: page.next_at, id: page.next_id, kind: page.next_kind } : null;
+      history.hasMore = Boolean(page.has_more);
+      history.loaded = true;
+    } catch (error) {
+      if (isCurrent()) toast(errorMessage(error));
+    } finally {
+      if (isCurrent()) {
+        history.loading = false;
+        if (state.historyReloadPending) {
+          state.historyReloadPending = false;
+          loadHistory(true);
+        } else if (state.view === 'history') {
+          renderHistory();
+        }
+      }
+    }
+  }
+
+  async function loadMoreFeed() {
+    if (!state.data?.feedHasMore || state.loading || !hasSession()) return;
+    const data = state.data, userId = state.session.user.id, generation = state.generation;
+    const cursor = data.feedCursor;
+    state.loading = true; updateSync();
+    const isCurrent = () => generation === state.generation
+      && state.session?.user.id === userId && state.data === data;
+    try {
+      const page = await backend.feedPage(userId, cursor);
+      if (!isCurrent()) return;
+      const profiles = await backend.publicProfiles(page.rows.map(request => request.user_id));
+      if (!isCurrent()) return;
+      page.rows.forEach(request => {
+        if (!data.requests.some(item => item.id === request.id)) data.requests.push(request);
+        if (!data.feedRequests.some(item => item.id === request.id)) data.feedRequests.push(request);
+      });
+      profiles.forEach(profile => state.publicProfiles.set(profile.id, profile));
+      data.feedHasMore = page.hasMore; data.feedCursor = page.nextCursor;
+      if (state.view === 'help') renderHelp();
+    } catch (error) {
+      if (isCurrent()) toast(errorMessage(error));
+    } finally {
+      if (isCurrent()) { state.loading = false; updateSync(); }
+    }
+  }
+
+  async function loadMoreNotifications() {
+    if (!state.data?.notificationsHasMore || state.loading || !hasSession()) return;
+    const data = state.data, userId = state.session.user.id, generation = state.generation;
+    const cursor = data.notificationsCursor;
+    state.loading = true; updateSync();
+    const isCurrent = () => generation === state.generation
+      && state.session?.user.id === userId && state.data === data;
+    try {
+      const page = await backend.notificationPage(userId, cursor);
+      if (!isCurrent()) return;
+      const known = new Set(data.notifications.map(item => item.id));
+      data.notifications.push(...page.rows.filter(item => !known.has(item.id)));
+      data.notificationsHasMore = page.hasMore; data.notificationsCursor = page.nextCursor;
+      if (state.view === 'notifications') renderNotifications();
+    } catch (error) {
+      if (isCurrent()) toast(errorMessage(error));
+    } finally {
+      if (isCurrent()) { state.loading = false; updateSync(); }
+    }
+  }
+
   async function loadData({ initial = false } = {}) {
     if (!hasSession()) return;
     if (state.loadPromise) return state.loadPromise;
@@ -246,6 +340,9 @@
         const data = await backend.snapshot(userId);
         if (generation !== state.generation || state.session?.user.id !== userId) return;
         state.data = data;
+        state.data.feedRequests = data.requests.slice();
+        state.historyGeneration += 1;
+        state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
         state.publicProfiles = new Map(data.publicProfiles.map(profile => [profile.id, profile]));
         state.publicProfiles.set(userId, { id: userId, public_name: data.profile.public_name, level: data.profile.level });
         state.loadedAt = Date.now();
@@ -256,6 +353,7 @@
           $('#auth-screen').classList.add('hidden');
           $('#app-shell').classList.remove('hidden');
           render();
+          if (state.view === 'history') loadHistory(true);
         }
       } catch (error) {
         if (generation !== state.generation) return;
@@ -282,6 +380,9 @@
       state.generation += 1;
       state.loadPromise = null;
       state.data = null;
+      state.historyGeneration += 1;
+      state.historyReloadPending = false;
+      state.history = { items: [], cursor: null, hasMore: true, loading: false, loaded: false };
       state.contributionIntent = null;
       state.publicProfiles = new Map();
     }
@@ -362,6 +463,8 @@
     const requestedModal = route.modalRequestId;
     if (!requestedModal) { state.modalRequestId = null; closeDialogOnly(); }
     render();
+    if (state.view === 'history' && !state.history.loaded) loadHistory(true);
+    if (state.detailId && !requestById(state.detailId)) ensureRequest(state.detailId).then(() => { if (state.view === 'detail' && state.detailId) renderDetail(); }).catch(() => {});
     if (requestedModal) setupContribution(requestedModal);
     if (scroll) window.scrollTo({ top: 0, behavior: 'auto' });
   }
@@ -401,13 +504,14 @@
   function renderHome() {
     const user = currentUser();
     $('#page-title').textContent = 'Início';
-    const active = state.data.requests.filter(request => effectiveStatus(request) === 'active');
-    const primary = active[0];
-    const almost = active.filter(request => request.id !== primary?.id).sort((a, b) => remainingFor(a) - remainingFor(b))[0];
-    const completed = state.data.requests.filter(request => request.status === 'completed').length;
+    const active = state.data.feedRequests.filter(request => effectiveStatus(request) === 'active');
+    const primary = active[0] || state.data.feedSummary.closest;
+    const almost = state.data.feedSummary.almost || null;
+    const activeCount = Number(state.data.feedSummary.active_count || 0);
+    const supportedRequests = Number(state.data.metrics.supported_requests || 0);
     app.innerHTML = `<div class="content">
       <section class="hero"><p class="eyebrow hero-eyebrow">Olá, ${escapeHtml(firstName(user.full_name))}</p><h2>Uma pequena ajuda pode resolver o dia de alguém.</h2><p>Contribuições voluntárias para necessidades pontuais.</p></section>
-      <div class="stats"><div class="stat"><strong>${active.length}</strong><span>pedidos ativos</span></div><div class="stat"><strong>${completed}</strong><span>metas concluídas com você</span></div><div class="stat stat-money"><strong>${brl(100).replace(/\s/, ' ')}</strong><span>para começar</span></div></div>
+      <div class="stats"><div class="stat"><strong>${activeCount}</strong><span>pedidos ativos</span></div><div class="stat"><strong>${supportedRequests}</strong><span>pedidos apoiados</span></div><div class="stat stat-money"><strong>${brl(100).replace(/\s/, ' ')}</strong><span>para começar</span></div></div>
       <div class="legal-banner"><strong>Importante:</strong> toda contribuição é voluntária e não constitui empréstimo, crédito ou investimento.</div>
       <div class="section-head"><h2>Alguém precisa da sua ajuda</h2><button type="button" class="link-btn" data-view="help">Ver todos</button></div>
       ${primary ? requestCard(primary) : '<section class="empty-state"><div class="empty-icon">♡</div><h2>A comunidade começa com pessoas</h2><p>Ainda não há pedidos ativos. Os novos pedidos aparecerão aqui.</p><button type="button" class="btn btn-primary full" data-view="request">Pedir apoio</button></section>'}
@@ -417,8 +521,8 @@
 
   function renderHelp() {
     $('#page-title').textContent = 'Ajudar';
-    const requests = state.data.requests.filter(request => effectiveStatus(request) === 'active');
-    app.innerHTML = `<div class="content"><div class="section-head"><div><h2>Pedidos ativos</h2><p class="muted tiny">Escolha livremente quem você quer apoiar.</p></div></div><div class="legal-banner compact"><strong>Sem obrigação de retorno.</strong> Ajudar hoje não cria direito automático de receber amanhã.</div>${requests.length ? requests.map(requestCard).join('') : '<section class="empty-state"><div class="empty-icon">♡</div><h2>Nenhum pedido ativo</h2><p>Novos pedidos aparecerão aqui.</p></section>'}</div>`;
+    const requests = state.data.feedRequests.filter(request => effectiveStatus(request) === 'active');
+    app.innerHTML = `<div class="content"><div class="section-head"><div><h2>Pedidos ativos</h2><p class="muted tiny">Escolha livremente quem você quer apoiar.</p></div></div><div class="legal-banner compact"><strong>Sem obrigação de retorno.</strong> Ajudar hoje não cria direito automático de receber amanhã.</div>${requests.length ? requests.map(requestCard).join('') : '<section class="empty-state"><div class="empty-icon">♡</div><h2>Nenhum pedido ativo</h2><p>Novos pedidos aparecerão aqui.</p></section>'}${state.data.feedHasMore ? '<button type="button" class="btn btn-secondary full top-gap" id="more-feed">Carregar mais pedidos</button>' : ''}</div>`;
   }
 
   function resetDraft() {
@@ -454,24 +558,16 @@
 
   function renderHistory() {
     $('#page-title').textContent = 'Histórico';
-    const totals = summary();
-    const userId = state.session.user.id;
-    const givenIds = new Set(totals.given.map(item => item.id));
-    const items = [
-      ...totals.own.map(request => ({ kind: 'request', time: request.created_at, request })),
-      ...state.data.contributions.filter(item => item.status === 'simulated_confirmed').map(contribution => ({ kind: givenIds.has(contribution.id) ? 'helped' : 'received', time: contribution.created_at, contribution }))
-    ].filter(item => state.historyTab === 'all' || item.kind === state.historyTab).sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
-    app.innerHTML = `<div class="content"><div class="stats"><div class="stat"><strong>${totals.helped}</strong><span>pessoas ajudadas</span></div><div class="stat stat-money"><strong>${brl(totals.contributed).replace(/\s/, ' ')}</strong><span>contribuído em simulações</span></div><div class="stat"><strong>${totals.received.length}</strong><span>apoios simulados recebidos</span></div></div><div class="segmented">${[['all', 'Todos'], ['helped', 'Ajudei'], ['received', 'Recebi']].map(([key, title]) => `<button type="button" class="${state.historyTab === key ? 'active' : ''}" data-history-tab="${key}">${title}</button>`).join('')}</div><div class="section-head history-head"><div><h2>Movimentações</h2><p class="tiny muted">Registros sincronizados da sua participação. Sem movimentação de dinheiro.</p></div></div>${items.length ? `<div class="history-list">${items.map(item => {
+    const totals = summary(), items = state.history.items;
+    app.innerHTML = `<div class="content"><div class="stats"><div class="stat"><strong>${totals.helped}</strong><span>pessoas ajudadas</span></div><div class="stat stat-money"><strong>${brl(totals.contributed).replace(/\\s/, ' ')}</strong><span>contribuído em simulações</span></div><div class="stat"><strong>${totals.receivedCount}</strong><span>apoios simulados recebidos</span></div></div><div class="segmented">${[['all', 'Todos'], ['helped', 'Ajudei'], ['received', 'Recebi']].map(([key, title]) => `<button type="button" class="${state.historyTab === key ? 'active' : ''}" data-history-tab="${key}">${title}</button>`).join('')}</div><div class="section-head history-head"><div><h2>Movimentações</h2><p class="tiny muted">Registros sincronizados da sua participação. Sem movimentação de dinheiro.</p></div></div>${items.length ? `<div class="history-list">${items.map(item => {
       if (item.kind === 'request') {
         const request = item.request;
         return `<div class="history-item history-published"><div class="history-icon">○</div><div class="history-main"><div class="history-title-row"><strong>Pedido publicado</strong><span class="history-badge">Pedido</span></div><div class="tiny muted">${escapeHtml(request.category)} · ${fullDate(item.time)}</div><button type="button" class="link-btn history-detail-link" data-details="${request.id}">Ver pedido</button></div><strong class="history-value status-value">${escapeHtml(statusLabel(request))}</strong></div>`;
       }
-      const contribution = item.contribution;
-      const request = requestById(contribution.request_id);
-      const helped = contribution.contributor_user_id === userId;
-      const name = helped ? request ? personName(request.user_id) : 'Pedido apoiado' : personName(contribution.contributor_user_id);
-      return `<div class="history-item ${helped ? 'history-helped' : 'history-received'}"><div class="history-icon">${helped ? '♡' : '↓'}</div><div class="history-main"><div class="history-title-row"><strong>${helped ? 'Você ajudou' : 'Você recebeu apoio'}</strong><span class="history-badge">${helped ? 'Ajudei' : 'Recebi'}</span></div><div class="tiny muted">${escapeHtml(name)} · ${fullDate(item.time)}</div>${helped ? `<div class="tiny muted">Taxa simulada: ${brl(contribution.platform_fee_cents)}</div>` : ''}${request ? `<button type="button" class="link-btn history-detail-link" data-details="${request.id}">Ver pedido</button>` : ''}</div><strong class="history-value">${brl(contribution.amount_cents)}</strong></div>`;
-    }).join('')}</div>` : '<section class="empty-state small"><div class="empty-icon">◷</div><h2>Nenhuma movimentação</h2><p>Não há registros para este filtro.</p></section>'}</div>`;
+      const contribution = item.contribution, request = item.request, helped = item.kind === 'helped';
+      const name = helped ? personName(request?.user_id) : personName(contribution.contributor_user_id);
+      return `<div class="history-item ${helped ? 'history-helped' : 'history-received'}"><div class="history-icon">${helped ? '♡' : '↓'}</div><div class="history-main"><div class="history-title-row"><strong>${helped ? 'Você ajudou' : 'Você recebeu apoio'}</strong><span class="history-badge">${helped ? 'Ajudei' : 'Recebi'}</span></div><div class="tiny muted">${escapeHtml(name)} · ${fullDate(item.time)}</div>${helped ? `<div class="tiny muted">Taxa simulada: ${brl(contribution.platform_fee_cents)}</div>` : ''}<button type="button" class="link-btn history-detail-link" data-details="${request.id}">Ver pedido</button></div><strong class="history-value">${brl(contribution.amount_cents)}</strong></div>`;
+    }).join('')}</div>` : state.history.loaded ? '<section class="empty-state small"><div class="empty-icon">◷</div><h2>Nenhuma movimentação</h2><p>Não há registros para este filtro.</p></section>' : '<p class="muted">Carregando histórico…</p>'}${state.history.hasMore ? '<button type="button" class="btn btn-secondary full top-gap" id="more-history" ' + (state.history.loading ? 'disabled' : '') + '>Carregar mais</button>' : ''}</div>`;
   }
 
   function renderProfile() {
@@ -485,7 +581,7 @@
     const nextRequest = totals.activeOwn ? 'Pedido em arrecadação' : totals.nextRequestAt > Date.now() ? fullDate(totals.nextRequestAt) : 'Disponível agora';
     app.innerHTML = `<div class="content">
       <section class="card profile-hero"><div class="profile-avatar">${escapeHtml(firstName(user.full_name)[0])}</div><h2>${escapeHtml(user.full_name)}</h2><p class="success">${state.session.user.email_confirmed_at ? '✓ E-mail confirmado' : 'Confirmação de e-mail pendente'}</p><p class="muted">Membro desde ${escapeHtml(joinedDate(user.created_at))}</p>${user.account_status !== 'active' ? '<div class="notice">Sua conta não está liberada para novos pedidos ou contribuições.</div>' : ''}</section>
-      <div class="stats"><div class="stat"><strong>${totals.helped}</strong><span>pessoas ajudadas</span></div><div class="stat"><strong>${totals.received.length}</strong><span>apoios recebidos</span></div><div class="stat stat-money"><strong>${brl(totals.contributed).replace(/\s/, ' ')}</strong><span>contribuído em simulações</span></div></div>
+      <div class="stats"><div class="stat"><strong>${totals.helped}</strong><span>pessoas ajudadas</span></div><div class="stat"><strong>${totals.receivedCount}</strong><span>apoios recebidos</span></div><div class="stat stat-money"><strong>${brl(totals.contributed).replace(/\s/, ' ')}</strong><span>contribuído em simulações</span></div></div>
       <section class="card progression-card"><div class="row between progression-head"><div><span class="tiny muted">Seu nível atual</span><h2>${escapeHtml(current?.display_name || levelName(user.level))}</h2></div><span class="level-chip">${brl(user.request_limit_cents)} por pedido</span></div><p class="muted progression-copy">Seus limites são definidos conforme a análise da conta.</p>${next ? `<div class="next-level"><span>Próximo nível</span><strong>${escapeHtml(next.display_name)}</strong><small>Até ${brl(next.request_limit_cents)} por pedido · ${next.period_limit_cents === null ? 'limite mensal sob análise' : brl(next.period_limit_cents) + ' por mês'}</small></div>` : ''}<p class="legal-note top-mini">A progressão considera identidade, tempo de uso, histórico e segurança. Contribuir não cria obrigação de receber nem garante mudança de nível. Confirmar o e-mail não equivale à verificação de identidade.</p></section>
       <section class="card"><div class="section-head no-margin"><h2>Seus limites</h2></div><div class="limit-row"><span>Por pedido</span><strong>${brl(user.request_limit_cents)}</strong></div><div class="limit-row"><span>Apoios simulados neste mês</span><strong>${brl(totals.receivedMonth)} / ${user.period_limit_cents === null ? 'Sob análise' : brl(user.period_limit_cents)}</strong></div><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted">${totals.available === null ? 'Limite mensal pendente de análise.' : 'Ainda disponível neste mês: ' + brl(totals.available)}</div><div class="limit-row divider"><span>Próximo pedido</span><strong>${escapeHtml(nextRequest)}</strong></div><p class="legal-note">O período mensal vai do primeiro ao último dia do mês, pelo horário UTC. Os valores desta fase são simulados.</p></section>
       <section class="card level-map-card"><div class="section-head no-margin"><div><h2>Progressão da Somma</h2><p class="tiny muted">Limites crescem gradualmente conforme a confiança na conta.</p></div></div><div class="level-list">${state.data.levels.map(level => `<div class="level-row ${level.code === user.level ? 'active' : ''}"><div><strong>${escapeHtml(level.display_name)}</strong><span>${level.code === 'special' ? 'Faixa sujeita a análise individual.' : 'Progressão sujeita à análise da conta.'}</span></div><div class="level-values"><strong>${level.code === 'special' ? 'Até ' : ''}${brl(level.request_limit_cents)}</strong><span>${level.period_limit_cents === null ? 'Limite mensal sob análise' : brl(level.period_limit_cents) + '/mês'}</span></div></div>`).join('')}</div></section>
@@ -511,8 +607,8 @@
 
   function renderNotifications() {
     $('#page-title').textContent = 'Notificações';
-    const unread = state.data.notifications.filter(item => !item.read_at).length;
-    app.innerHTML = `<div class="content"><button type="button" class="back-link" data-back>‹ Voltar</button><div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div><div class="notification-list">${state.data.notifications.length ? state.data.notifications.map(item => `<div class="notification-item ${item.read_at ? '' : 'unread'}"><span class="notification-dot" aria-hidden="true"></span><div class="notification-copy"><div class="notification-title-row"><strong>${escapeHtml(item.title)}</strong>${item.read_at ? '' : '<span class="new-label">Nova</span>'}</div><p>${escapeHtml(item.body)}</p><span class="tiny muted">${fullDate(item.created_at)}</span></div></div>`).join('') : '<section class="empty-state small"><div class="empty-icon">◌</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div><button type="button" id="mark-read" class="btn btn-secondary full top-gap" ${unread ? '' : 'disabled'}>Marcar todas como lidas</button></div>`;
+    const unread = state.data.unreadCount || 0;
+    app.innerHTML = `<div class="content"><button type="button" class="back-link" data-back>‹ Voltar</button><div class="section-head"><div><h2>Central de notificações</h2><p class="muted tiny">Avisos sobre pedidos, contribuições e sua conta.</p></div></div><div class="notification-list">${state.data.notifications.length ? state.data.notifications.map(item => `<div class="notification-item ${item.read_at ? '' : 'unread'}"><span class="notification-dot" aria-hidden="true"></span><div class="notification-copy"><div class="notification-title-row"><strong>${escapeHtml(item.title)}</strong>${item.read_at ? '' : '<span class="new-label">Nova</span>'}</div><p>${escapeHtml(item.body)}</p><span class="tiny muted">${fullDate(item.created_at)}</span></div></div>`).join('') : '<section class="empty-state small"><div class="empty-icon">◌</div><h2>Nenhuma notificação</h2><p>Novidades aparecerão aqui.</p></section>'}</div>${state.data.notificationsHasMore ? '<button type="button" id="more-notifications" class="btn btn-secondary full top-gap">Carregar mais notificações</button>' : ''}<button type="button" id="mark-read" class="btn btn-secondary full top-gap" ${unread ? '' : 'disabled'}>Marcar todas como lidas</button></div>`;
   }
 
   function render() {
@@ -524,7 +620,7 @@
       if (button.dataset.view === state.view) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
     });
-    const unread = state.data.notifications.filter(item => !item.read_at).length;
+    const unread = state.data.unreadCount || 0;
     $('#notify-badge').textContent = unread > 99 ? '99+' : String(unread);
     $('#notify-badge').classList.toggle('hidden', !unread);
     updatePending();
@@ -551,7 +647,11 @@
 
   function setupContribution(id) {
     const request = requestById(id);
-    if (!request || request.user_id === state.session.user.id) { state.modalRequestId = null; closeDialogOnly(); return; }
+    if (!request) {
+      ensureRequest(id).then(found => { if (found && state.modalRequestId === id) setupContribution(id); }).catch(error => toast(errorMessage(error)));
+      return;
+    }
+    if (request.user_id === state.session.user.id) { state.modalRequestId = null; closeDialogOnly(); return; }
     const pending = state.contributionIntent?.requestId === id ? state.contributionIntent : null;
     state.modalRequestId = id;
     state.selectedCents = pending ? pending.amountCents : 0;
@@ -630,6 +730,7 @@
           feedback('#auth-feedback', 'Confira seu e-mail para confirmar o cadastro. Depois, entre com seu e-mail e sua senha. Verifique também a caixa de spam.', true);
           $('#login-email').value = email;
           $('#resend-confirmation').classList.remove('hidden');
+          $('#confirmed-signup-login').classList.remove('hidden');
         }
       } else if (form.id === 'forgot-form') {
         const { error } = await auth.resetPasswordForEmail($('#forgot-email').value.trim().toLowerCase(), { redirectTo: config.siteUrl });
@@ -673,6 +774,7 @@
         }
         if (state.session?.user.id !== values.userId) return;
         if (!state.data.requests.some(request => request.id === published.id)) state.data.requests.unshift(published);
+        if (!state.data.feedRequests.some(request => request.id === published.id)) state.data.feedRequests.unshift(published);
         resetDraft();
         navigate('home');
         toast('Pedido publicado. Ele já pode receber contribuições simuladas.');
@@ -788,8 +890,19 @@
     if (button.hasAttribute('data-back') || button.id === 'close-contribution') { back(); return; }
     if (button.id === 'notify-btn') { navigate('notifications'); return; }
     if (button.id === 'resume-contribution' && state.contributionIntent) { openContribution(state.contributionIntent.requestId); return; }
-    if (button.id === 'refresh-data' || button.id === 'detail-refresh') { loadData().catch(() => {}); return; }
-    if (button.dataset.historyTab) { state.historyTab = button.dataset.historyTab; renderHistory(); return; }
+    if (button.id === 'refresh-data') { loadData().catch(() => {}); return; }
+    if (button.id === 'detail-refresh') { ensureRequest(state.detailId).then(() => renderDetail()).catch(error => toast(errorMessage(error))); return; }
+    if (button.dataset.historyTab) {
+      if (state.historyTab !== button.dataset.historyTab) {
+        state.historyTab = button.dataset.historyTab;
+        if (state.history.loading) state.historyReloadPending = true;
+        else loadHistory(true);
+      }
+      return;
+    }
+    if (button.id === 'more-history') { loadHistory(); return; }
+    if (button.id === 'more-feed') { loadMoreFeed(); return; }
+    if (button.id === 'more-notifications') { loadMoreNotifications(); return; }
     if (button.dataset.requestStep) { state.requestStep = Number(button.dataset.requestStep); renderRequest(); return; }
     if (button.dataset.amount && !state.contributionIntent) {
       state.selectedCents = Number(button.dataset.amount);
@@ -801,10 +914,11 @@
     if (button.id === 'mark-read') {
       button.disabled = true;
       const userId = state.session.user.id;
-      backend.markNotificationsRead(userId).then(rows => {
+      backend.markNotificationsRead(userId).then(() => {
         if (state.session?.user.id !== userId || !state.data) return;
-        const updated = new Map(rows.map(row => [row.id, row.read_at]));
-        state.data.notifications.forEach(item => { if (updated.has(item.id)) item.read_at = updated.get(item.id); });
+        const readAt = new Date().toISOString();
+        state.data.notifications.forEach(item => { item.read_at = item.read_at || readAt; });
+        state.data.unreadCount = 0;
         render();
         toast('Notificações marcadas como lidas.');
       }).catch(error => { button.disabled = false; toast(errorMessage(error)); });

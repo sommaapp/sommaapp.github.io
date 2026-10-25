@@ -269,8 +269,9 @@ begin
   end if;
 
   -- Shared profile locks protect account status and the beneficiary's limit.
-  -- All paths acquire profile locks before the request lock; UUID ordering
-  -- also makes the two-profile acquisition deterministic.
+  -- A user can have only one active request (partial unique index), and the
+  -- request row is locked before the monthly SUM, serializing contributions
+  -- to that beneficiary's active request. UUID ordering stabilizes profile locks.
   perform p.id from public.profiles p
   where p.id in (new.contributor_user_id, v_owner)
   order by p.id for share;

@@ -1,0 +1,43 @@
+name: Frontend logic and browser tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'backend.js'
+      - 'config.js'
+      - 'index.html'
+      - 'styles.css'
+      - 'sw.js'
+      - 'vendor/**'
+      - 'tests/frontend-logic.test.cjs'
+      - 'tests/frontend-browser.test.cjs'
+      - 'tooling/package.json'
+      - 'tooling/package-lock.json'
+      - '.github/workflows/frontend-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tooling/package-lock.json
+      - name: Install pinned test dependencies
+        run: npm ci --prefix tooling --ignore-scripts --no-audit --no-fund
+      - name: Run frontend logic tests
+        run: npm --prefix tooling run test:logic
+      - name: Install Chromium for Playwright
+        run: npm --prefix tooling exec -- playwright install --with-deps chromium
+      - name: Run browser integration tests
+        run: npm --prefix tooling run test:browser

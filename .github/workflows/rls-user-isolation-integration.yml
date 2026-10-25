@@ -1,0 +1,34 @@
+name: RLS user isolation integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/postgres-rls-isolation.integration.sql'
+      - '.github/workflows/rls-user-isolation-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rls-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start disposable PostgreSQL
+        run: |
+          docker network create somma-rls-test
+          docker run -d --name somma-rls-pg --network somma-rls-test -e POSTGRES_PASSWORD=testpass -e POSTGRES_USER=postgres postgres:16
+          for i in {1..30}; do
+            if docker exec somma-rls-pg pg_isready -U postgres; then break; fi
+            sleep 2
+          done
+          docker exec somma-rls-pg pg_isready -U postgres
+      - name: Test synthetic two-user RLS isolation
+        run: docker exec -i somma-rls-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-isolation.integration.sql
+      - name: Stop disposable containers
+        if: always()
+        run: |
+          docker rm -f somma-rls-pg || true
+          docker network rm somma-rls-test || true
