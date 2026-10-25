@@ -131,3 +131,14 @@ Nenhuma falha nova e demonstrável foi identificada nessa leitura estática, por
 - Confirmar no painel a política efetiva de Auth, pois o HTML da branch não garante por si só a política do servidor. A interface pública `main` ainda indica 8 caracteres até merge/deploy autorizado.
 - O plano e as configurações de Auth não foram alterados. Nenhum custo foi assumido. A decisão de aceitar temporariamente o risco foi registrada para revisão futura quando o plano Pro for adquirido.
 - Condição para encerramento: após upgrade, ativar a proteção contra senhas vazadas, conferir mínimo/complexidade, executar teste controlado de senha conhecida como comprometida sem expor credenciais reais, e confirmar que o alerta desapareceu no Security Advisor.
+
+
+### Revalidação somente leitura — 25/10/2026
+
+- Os três fluxos de CI passaram no commit `619ac27040abacd3a1d1a2e9700e63be9486d214`: frontend/browser, isolamento RLS e migrações em PostgreSQL descartável. Isso valida os testes automatizados, não substitui teste de Auth real nem sincronização entre dispositivos.
+- Nova consulta ao Security Advisor confirmou que `auth_leaked_password_protection` continua em WARN. Os cinco avisos `unused_index` permanecem informativos; nenhum índice foi removido.
+- Nova inspeção de catálogo confirmou RLS habilitado nas oito tabelas públicas listadas, sem privilégios de tabela concedidos a `anon` nas tabelas de aplicação. As políticas de leitura/escrita observadas são direcionadas a `authenticated`; há concessões de escrita por coluna limitadas a campos específicos. Isto é evidência de configuração, não uma prova completa contra todas as classes de ataque.
+- As funções do schema `private` observadas usam `search_path` vazio. Entre as funções inspecionadas, apenas `private.can_read_request(uuid)` tem EXECUTE para `authenticated`; nenhuma tem EXECUTE para `anon`. Funções SECURITY DEFINER restantes aparecem sem EXECUTE para esses papéis, conforme a consulta de privilégios.
+- A lista de migrações de produção segue limitada às quatro versões de 16–17/10/2026 já documentadas; as migrações de teste da branch não aparecem como aplicadas em produção.
+- PR #8 permanece aberto, em draft e não mesclado. Nenhuma mutação foi executada nesta revalidação; banco, Auth, plano e site público permanecem sem alterações por esta auditoria.
+- Bloqueios ainda ativos: proteção contra senhas vazadas indisponível no plano atual; confirmar política de senha efetiva no servidor; verificar entrega/redirects de e-mail e recuperação; validar sincronização entre dispositivos reais antes de considerar merge ou lançamento amplo.
