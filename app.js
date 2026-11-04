@@ -111,7 +111,7 @@
     const messages = {
       invalid_credentials: 'E-mail ou senha incorretos.',
       email_not_confirmed: 'Confirme seu e-mail antes de entrar. Verifique também a caixa de spam.',
-      weak_password: 'Escolha uma senha mais forte, com pelo menos 8 caracteres.',
+      weak_password: 'A senha precisa ter pelo menos 12 caracteres, com maiúsculas, minúsculas, números e símbolos.',
       same_password: 'Escolha uma senha diferente da senha atual.',
       email_address_invalid: 'Confira o endereço de e-mail informado.',
       email_address_not_authorized: 'O envio de e-mails de acesso ainda precisa ser habilitado para este endereço pela Somma.',
@@ -609,6 +609,17 @@
     } catch (error) { toast(errorMessage(error)); }
   }
 
+  function validatePassword(password) {
+    if (typeof password !== 'string' || password.length < 12) {
+      return 'A senha precisa ter pelo menos 12 caracteres.';
+    }
+    if (!/[a-z]/.test(password)) return 'Inclua pelo menos uma letra minúscula.';
+    if (!/[A-Z]/.test(password)) return 'Inclua pelo menos uma letra maiúscula.';
+    if (!/[0-9]/.test(password)) return 'Inclua pelo menos um número.';
+    if (!/[^A-Za-z0-9]/.test(password)) return 'Inclua pelo menos um símbolo.';
+    return null;
+  }
+
   async function submitAuth(form) {
     await withForm(form, '#auth-feedback', async () => {
       const auth = backend.client.auth;
@@ -621,7 +632,10 @@
         const name = $('#signup-name').value.trim();
         if (name.length < 2) throw { code: 'invalid_full_name' };
         const email = $('#signup-email').value.trim().toLowerCase();
-        const { data, error } = await auth.signUp({ email, password: $('#signup-password').value, options: { data: { full_name: name }, emailRedirectTo: config.siteUrl } });
+        const password = $('#signup-password').value;
+        const passwordError = validatePassword(password);
+        if (passwordError) { feedback('#auth-feedback', passwordError); return; }
+        const { data, error } = await auth.signUp({ email, password, options: { data: { full_name: name }, emailRedirectTo: config.siteUrl } });
         $('#signup-password').value = '';
         if (error) throw error;
         state.confirmEmail = email;
@@ -637,6 +651,8 @@
         feedback('#auth-feedback', 'Se houver uma conta para este e-mail, você receberá um link para definir uma nova senha.', true);
       } else if (form.id === 'recovery-form') {
         const password = $('#recovery-password').value;
+        const passwordError = validatePassword(password);
+        if (passwordError) { feedback('#auth-feedback', passwordError); return; }
         if (password !== $('#recovery-confirm').value) { feedback('#auth-feedback', 'As senhas precisam ser iguais.'); return; }
         const { error } = await auth.updateUser({ password });
         $('#recovery-password').value = '';
