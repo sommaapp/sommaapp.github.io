@@ -1,0 +1,26 @@
+name: Security data minimization
+on:
+  pull_request:
+    paths:
+      - 'backend.js'
+      - 'tests/security-data-minimization.test.cjs'
+      - '.github/workflows/security-data-minimization.yml'
+  push:
+    branches:
+      - main
+      - 'security/**'
+    paths:
+      - 'backend.js'
+      - 'tests/security-data-minimization.test.cjs'
+      - '.github/workflows/security-data-minimization.yml'
+permissions:
+  contents: read
+jobs:
+  projection-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tests/security-data-minimization.test.cjs

@@ -186,6 +186,9 @@
     state.loadPromise = null;
     state.recovery = false;
     state.contributionIntent = null;
+    try {
+      sessionStorage.removeItem(INTENT_KEY);
+    } catch (_) { /* An unavailable browser store must not block logout. */ }
     state.modalRequestId = null;
     state.selectedCents = 0;
     state.view = 'home';
