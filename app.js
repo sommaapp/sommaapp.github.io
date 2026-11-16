@@ -228,10 +228,18 @@
   async function ensureRequest(id) {
     const existing = requestById(id);
     if (existing) return existing;
+    const data = state.data;
+    const userId = state.session?.user.id;
+    const generation = state.generation;
+    if (!data || !userId) return null;
+    const isCurrent = () => generation === state.generation
+      && state.session?.user.id === userId && state.data === data;
     const request = await backend.getRequest(id);
-    if (!request || !state.data) return null;
-    if (!state.data.requests.some(item => item.id === id)) state.data.requests.push(request);
-    (await backend.publicProfiles([request.user_id])).forEach(profile => state.publicProfiles.set(profile.id, profile));
+    if (!request || !isCurrent()) return null;
+    if (!data.requests.some(item => item.id === id)) data.requests.push(request);
+    const profiles = await backend.publicProfiles([request.user_id]);
+    if (!isCurrent()) return null;
+    profiles.forEach(profile => state.publicProfiles.set(profile.id, profile));
     return request;
   }
 
