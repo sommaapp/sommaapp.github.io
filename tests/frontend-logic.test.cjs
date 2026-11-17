@@ -9,15 +9,16 @@ const listeners={};const doc={hidden:false,querySelector:s=>get(s.slice(1)),quer
 const location={hash:'#home',pathname:'/',search:''};const entries=[{somma:true,view:'home',depth:0}];
 const history={state:entries[0],replaceState(s,_,url){entries[entries.length-1]=this.state=s;location.hash=url.slice(url.indexOf('#'))},pushState(s,_,url){entries.push(this.state=s);location.hash=url.slice(url.indexOf('#'))},back(){if(entries.length>1)entries.pop();this.state=entries.at(-1);listeners.popstate?.()}};
 const storage=new Map();const ctx={document:doc,location,history,navigator:{onLine:true},crypto:require('crypto').webcrypto,URLSearchParams,console,Date,Map,Set,HTMLFormElement:class{},Element:class{},setTimeout:()=>0,clearTimeout:()=>{},setInterval:()=>0,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
-let feedPageResolver, notificationPageResolver, historyPageResolver, historyProfilesResolver, holdHistoryProfiles=false, profileCalls=0;
+let feedPageResolver, notificationPageResolver, historyPageResolver, historyProfilesResolver, detailRequestResolver, detailProfilesResolver, holdHistoryProfiles=false, holdDetailProfiles=false, profileCalls=0;
 const mockBackend={
  feedPage:()=>new Promise(resolve=>{feedPageResolver=resolve}),
  notificationPage:()=>new Promise(resolve=>{notificationPageResolver=resolve}),
  historyPage:()=>new Promise(resolve=>{historyPageResolver=resolve}),
-  publicProfiles:async ids=>{profileCalls++;if(holdHistoryProfiles)return new Promise(resolve=>{historyProfilesResolver=resolve});return ids.map(id=>({id,public_name:'Old account'}))}
+ getRequest:()=>new Promise(resolve=>{detailRequestResolver=resolve}),
+  publicProfiles:async ids=>{profileCalls++;if(holdHistoryProfiles)return new Promise(resolve=>{historyProfilesResolver=resolve});if(holdDetailProfiles)return new Promise(resolve=>{detailProfilesResolver=resolve});return ids.map(id=>({id,public_name:'Old account'}))}
 };
 ctx.window={SOMMA_CONFIG:{},SommaBackend:mockBackend,scrollTo(){},addEventListener:(n,fn)=>listeners[n]=fn};
-let src=fs.readFileSync(root+'/app.js','utf8');src=src.replace('  bootstrap();','  window.__test={state,parseCents,feeFor,summary,render,navigate,back,openContribution,clearAccount,saveIntent,effectiveStatus,errorMessage,readRoute,loadMoreFeed,loadMoreNotifications,loadHistory};');
+let src=fs.readFileSync(root+'/app.js','utf8');src=src.replace('  bootstrap();','  window.__test={state,parseCents,feeFor,summary,render,navigate,back,openContribution,clearAccount,saveIntent,effectiveStatus,errorMessage,readRoute,loadMoreFeed,loadMoreNotifications,loadHistory,ensureRequest};');
 vm.runInNewContext(src,ctx);const t=ctx.window.__test;
 const uid='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
 const reqId='33333333-3333-4333-8333-333333333333',ownId='44444444-4444-4444-8444-444444444444';
@@ -79,6 +80,36 @@ holdHistoryProfiles=false;
 assert.equal(newHistory.items.length,0);assert.equal(newHistory.loading,false);assert.equal(newHistory.loaded,false);
 assert.equal(newHistoryData.requests.length,0);assert.equal(t.state.publicProfiles.has(uid),false);
 checks++;console.log('PASS history pagination ignores stale account response after profile lookup');
+
+// Regression: a detail fetch that resolves after logout/account switch must not
+// insert the previous account's request into the new account's data.
+const detailOldData={requests:[]},detailNewData={requests:[]};
+t.state.session={user:{id:uid}};t.state.generation=60;t.state.data=detailOldData;t.state.publicProfiles.clear();
+const detailTask=t.ensureRequest('old-request-id');
+t.state.generation=61;t.state.session={user:{id:other}};t.state.data=detailNewData;
+detailRequestResolver({id:'old-request-id',user_id:uid,description:'Private old-account request'});
+assert.equal(await detailTask,null);
+assert.equal(detailOldData.requests.length,0);assert.equal(detailNewData.requests.length,0);
+assert.equal(profileCalls,1);
+checks++;console.log('PASS detail fetch ignores stale response after account switch');
+
+// Regression: if the request resolves while the old account is active but the
+// profile lookup resolves after switching accounts, the stale profile is dropped.
+const profileOldData={requests:[]},profileNewData={requests:[]};
+t.state.session={user:{id:uid}};t.state.generation=70;t.state.data=profileOldData;t.state.publicProfiles.clear();
+holdDetailProfiles=true;
+const profileTask=t.ensureRequest('old-profile-request');
+detailRequestResolver({id:'old-profile-request',user_id:uid,description:'Synthetic request'});
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(profileOldData.requests.length,1);
+assert.equal(typeof detailProfilesResolver,'function');
+t.state.generation=71;t.state.session={user:{id:other}};t.state.data=profileNewData;
+detailProfilesResolver([{id:uid,public_name:'Old account'}]);
+assert.equal(await profileTask,null);
+holdDetailProfiles=false;
+assert.equal(profileNewData.requests.length,0);
+assert.equal(t.state.publicProfiles.has(uid),false);
+checks++;console.log('PASS detail profile lookup ignores stale response after account switch');
 
 const ops=[];let insertError=null,found=null,findError=null;let method='select';
 class Query{constructor(table){this.table=table;this.where={};this.kind='select'}select(){return this}insert(v){this.kind='insert';this.values=v;return this}update(v){this.kind='update';this.values=v;return this}eq(k,v){this.where[k]=v;return this}is(k,v){this.where[k]=v;return this}order(){return this}range(){return this}then(a,b){return this.finish().then(a,b)}single(){return this.finish()}maybeSingle(){return this.finish()}async finish(){ops.push({table:this.table,kind:this.kind,values:this.values,where:this.where});if(this.table==='contributions'){if(this.kind==='insert')return {data:insertError?null:found,error:insertError};return {data:found,error:findError}}return {data:this.values,error:null}}}
