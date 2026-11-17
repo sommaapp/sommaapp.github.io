@@ -13,7 +13,17 @@ npm --prefix tooling run test:browser
 
 Para um Chromium já instalado, informe `SOMMA_CHROMIUM_EXECUTABLE`. O runner aceita `SOMMA_TEST_OUTPUT_DIR` e, por padrão, salva JSON de resultados e capturas em `test-results/` na raiz do projeto. Esses resultados não pertencem à raiz pública do site.
 
-## Resultado observado em 17/10/2026
+## Resultado observado em 21/10/2026
+
+Execuções GitHub Actions no commit `37c46c06` da branch `test/rls-user-isolation`:
+
+- [Lógica do frontend e testes Chromium](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39644469993) — concluído com sucesso; 18 verificações de lógica/API e 19 verificações de interface aprovadas.
+- [Migrações, regras de contribuição e teste concorrente](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39644469945) — concluído com sucesso em PostgreSQL descartável.
+- [Isolamento RLS entre usuários sintéticos](https://github.com/sommaapp/sommaapp.github.io/actions/runs/39644470212) — concluído com sucesso.
+
+Essas execuções não aplicam migrações no Supabase de produção e não usam dados de pessoas reais. Os testes de banco usam PostgreSQL 16 descartável e uma implementação mínima de `auth.uid()`; não equivalem a teste completo de Supabase Auth/JWT.
+
+## Cobertura dos testes de frontend
 
 - **18/18 verificações de lógica/API**: moeda em centavos, taxa, estado vazio, métricas, nomes públicos, limites, navegação e UUIDs, saída, campos permitidos e recuperação idempotente de resposta perdida.
 - **19/19 verificações de interface**, com Playwright 1.62.1, Chromium 155.0.8059.84 e SDK Supabase 2.118.0 real: cadastro aguardando confirmação, erros e sucesso de login, back, modal/taxa, resposta perdida, clique repetido, pedido de 24h, segundo pedido bloqueado, histórico, edição de nome, notificações, offline, layout, logout com recarga, callback de recuperação e ausência de exceções JavaScript.

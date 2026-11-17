@@ -15,7 +15,7 @@ const session=()=>({access_token:jwt,refresh_token:'qa-refresh-token-only',expir
 const profile={id:uid,full_name:'Pessoa de Teste',public_name:'Pessoa T.',level:'initial',request_limit_cents:5000,period_limit_cents:15000,account_status:'active',created_at:at,updated_at:at};
 const levels=[['initial','Inicial',5000,15000],['verified','Verificado',10000,30000],['community','Comunidade',15000,45000],['trusted','Confiável',20000,60000],['special','Especial',30000,null]].map((a,i)=>({code:a[0],display_name:a[1],request_limit_cents:a[2],period_limit_cents:a[3],sort_order:i,rules:{}}));
 const db={profiles:[profile],public_profiles:[{id:uid,public_name:'Pessoa T.',level:'initial',created_at:at},{id:other,public_name:'Ana S.',level:'initial',created_at:at}],user_levels:levels,requests:[{id:rid,user_id:other,category:'Trabalho',description:'Preciso completar o transporte para começar no trabalho.',goal_cents:5000,raised_cents:0,status:'active',starts_at:at,expires_at:new Date(Date.now()+48*3600000).toISOString(),created_at:at,helper_count:0,duration_hours:48}],contributions:[],notifications:[]};
-let lostResponse=true,postContributions=0,markCount=0,requestPosts=0,recoveryUpdates=0;const errors=[],requests=[];let debugPage;
+let lostResponse=true,postContributions=0,markCount=0,requestPosts=0,recoveryUpdates=0;const errors=[],requests=[],authRedirects=[];let debugPage;
 function freshId(){return require('crypto').randomUUID()}
 function matches(row,url){for(const [key,value] of url.searchParams){if(['select','order','offset','limit'].includes(key))continue;if(value.startsWith('eq.')&&String(row[key])!==value.slice(3))return false;if(value==='is.null'&&row[key]!=null)return false;if(value.startsWith('in.(')&&!value.slice(4,-1).split(',').includes(String(row[key])))return false}return true}
 async function main(){
@@ -25,7 +25,7 @@ async function main(){
  const page=debugPage=await context.newPage();page.setDefaultTimeout(7000);page.on('pageerror',e=>errors.push(String(e)));
  await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),method=req.method();
-  const headers={'content-type':'application/json','access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS'};
+  const headers={'content-type':'application/json','access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS','access-control-expose-headers':'content-range, content-location, preference-applied'};
   const respond=(data,status=200)=>route.fulfill({status,headers,body:status===204?'':JSON.stringify(data)});
   if(url.hostname==='somma.test'){
    let name=decodeURIComponent(url.pathname);if(name==='/')name='/index.html';
@@ -35,6 +35,7 @@ async function main(){
   }
   if(url.hostname!=='sxwsfgotsztetnawofyx.supabase.co')throw Error('Unexpected external request '+url.origin);
   requests.push(method+' '+url.pathname);
+  if(['/auth/v1/signup','/auth/v1/recover','/auth/v1/resend'].includes(url.pathname))authRedirects.push({path:url.pathname,redirectTo:url.searchParams.get('redirect_to')});
   if(method==='OPTIONS')return respond({},204);
   const body=req.postData()?JSON.parse(req.postData()):{};
   if(url.pathname==='/auth/v1/token')return body.password==='wrong-password'?respond({code:'invalid_credentials',msg:'Invalid login credentials'},400):respond(session());
@@ -44,6 +45,37 @@ async function main(){
   if(url.pathname==='/auth/v1/user'){if(method==='PUT'){recoveryUpdates++;return respond(user)}return respond(user)}
   if(!url.pathname.startsWith('/rest/v1/'))throw Error('Unexpected API path '+url.pathname);
   const table=url.pathname.split('/').pop();
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_feed_summary') {
+   const active=db.requests.filter(r=>r.status==='active'&&r.user_id!==uid&&(!r.expires_at||Date.parse(r.expires_at)>Date.now()));
+   active.sort((a,b)=>(a.goal_cents-a.raised_cents)-(b.goal_cents-b.raised_cents)||Date.parse(b.created_at)-Date.parse(a.created_at)||b.id.localeCompare(a.id));
+   return respond({active_count:active.length,completed_count:db.requests.filter(r=>r.status==='completed').length,closest:active[0]||null,almost:active[1]||null});
+  }
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_user_summary') {
+   const given=db.contributions.filter(c=>c.contributor_user_id===uid&&c.status==='simulated_confirmed');
+   const ownIds=new Set(db.requests.filter(r=>r.user_id===uid).map(r=>r.id));
+   const received=db.contributions.filter(c=>ownIds.has(c.request_id)&&c.status==='simulated_confirmed');
+   const monthStart=Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),1);
+   const latest=db.requests.filter(r=>r.user_id===uid).reduce((n,r)=>Math.max(n,Date.parse(r.created_at)),0);
+   return respond({supported_requests:new Set(given.map(c=>c.request_id)).size,helped:new Set(given.map(c=>db.requests.find(r=>r.id===c.request_id)?.user_id).filter(Boolean)).size,contributed_cents:given.reduce((n,c)=>n+c.amount_cents,0),received_count:received.length,received_month_cents:received.filter(c=>Date.parse(c.created_at)>=monthStart).reduce((n,c)=>n+c.amount_cents,0),next_request_at:latest?new Date(latest+7*86400000).toISOString():null});
+  }
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_history_page') {
+   const events=[];
+   for(const r of db.requests.filter(r=>r.user_id===uid&&['all','request'].includes(body.p_kind||'all')))events.push({kind:'request',time:r.created_at,event_id:r.id,request:r,contribution:null,person_id:null});
+   for(const c of db.contributions.filter(c=>c.status==='simulated_confirmed')){
+    const r=db.requests.find(r=>r.id===c.request_id);if(!r)continue;
+    if(c.contributor_user_id===uid&&['all','helped'].includes(body.p_kind||'all'))events.push({kind:'helped',time:c.created_at,event_id:c.id,request:r,contribution:c,person_id:r.user_id});
+    if(r.user_id===uid&&['all','received'].includes(body.p_kind||'all'))events.push({kind:'received',time:c.created_at,event_id:c.id,request:r,contribution:c,person_id:c.contributor_user_id});
+   }
+   events.sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)||b.event_id.localeCompare(a.event_id)||b.kind.localeCompare(a.kind));
+   const beforeAt=body.p_before_at?Date.parse(body.p_before_at):null,beforeId=body.p_before_id,beforeKind=body.p_before_kind;
+   const eligible=beforeAt===null?events:events.filter(e=>{const d=Date.parse(e.time);return d<beforeAt||(d===beforeAt&&(e.event_id<beforeId||(e.event_id===beforeId&&e.kind<beforeKind)))});
+   const limit=Math.max(1,Math.min(Number(body.p_limit)||24,50)),items=eligible.slice(0,limit),last=items[items.length-1];
+   return respond({items,has_more:eligible.length>limit,next_at:last?.time||null,next_id:last?.event_id||null,next_kind:last?.kind||null});
+  }
+  if (method === 'HEAD' && table === 'notifications') {
+   const unread=db.notifications.filter(n=>n.user_id===uid&&n.read_at==null).length;
+   return route.fulfill({status:200,headers:{...headers,'content-range':`*/${unread}`},body:''});
+  }
   if(!db[table])return respond({code:'42P01',message:'Unknown table'},400);
   if(method==='GET'){
    let result=db[table].filter(row=>matches(row,url));const offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||99999);result=result.slice(offset,offset+limit);
@@ -74,8 +106,12 @@ async function main(){
  await pass('SDK loads and initial auth has no fictitious users',async()=>{assert.equal(await page.locator('#demo-access').count(),0);assert.equal(await page.locator('#boot-screen').isVisible(),false)});
  await pass('legacy password fields removed without altering demo data',async()=>{const data=await page.evaluate(()=>({legacy:JSON.parse(localStorage.getItem('somma_mvp_v37_state')),other:localStorage.getItem('qa-other-data')}));assert.equal(data.legacy.user.password,undefined);assert.equal(data.legacy.users[0].password,undefined);assert.equal(data.legacy.user.name,'Legacy Name');assert.equal(data.legacy.requests[0].goal,50);assert.equal(data.other,'keep-me')});
  await page.screenshot({path:path.join(output,'somma_auth_mobile.png'),fullPage:true});
- await pass('signup waits for email confirmation',async()=>{await page.locator('[data-auth-tab="signup"]').click();await page.locator('#signup-name').fill('Pessoa de Teste');await page.locator('#signup-email').fill(user.email);await page.locator('#signup-password').fill('QA-Test-Only-Password!');await page.locator('#signup-terms').check();await page.locator('#signup-form button[type="submit"]').click();await page.locator('#auth-feedback').filter({hasText:'Confira seu e-mail'}).waitFor();assert.equal(await page.locator('#app-shell').isVisible(),false)});
- await pass('login errors are visible without opening private screens',async()=>{await page.locator('[data-auth-tab="login"]').first().click();await page.locator('#login-email').fill(user.email);await page.locator('#login-password').fill('wrong-password');await page.locator('#login-form button[type="submit"]').click();await page.locator('#auth-feedback').filter({hasText:'E-mail ou senha incorretos'}).waitFor()});
+ await pass('signup and recovery enforce 12-character minimum',async()=>{assert.equal(await page.locator('#signup-password').getAttribute('minlength'),'12');assert.equal(await page.locator('#recovery-password').getAttribute('minlength'),'12');assert.equal(await page.locator('#recovery-confirm').getAttribute('minlength'),'12')});
+ await pass('signup waits for email confirmation',async()=>{await page.locator('[data-auth-tab="signup"]').click();await page.locator('#signup-name').fill('Pessoa de Teste');await page.locator('#signup-email').fill(user.email);await page.locator('#signup-password').fill('QA-Test-Only-Password!');await page.locator('#signup-terms').check();await page.locator('#signup-form button[type="submit"]').click();await page.locator('#auth-feedback').filter({hasText:'Confira seu e-mail'}).waitFor();assert.equal(await page.locator('#app-shell').isVisible(),false);assert.ok(authRedirects.some(x=>x.path==='/auth/v1/signup'&&x.redirectTo==='https://sommaapp.github.io/'))});
+  await pass('confirmed email action returns to login with email prefilled',async()=>{await page.locator('#confirmed-signup-login').click();assert.equal(await page.locator('#login-email').inputValue(),user.email);assert.equal(await page.locator('#login-form').isVisible(),true)});
+  await pass('password recovery sends the configured site redirect',async()=>{await page.locator('[data-auth-tab="forgot"]').click();await page.locator('#forgot-email').fill(user.email);await page.locator('#forgot-form button[type="submit"]').click();await page.locator('#auth-feedback').filter({hasText:'Se houver uma conta'}).waitFor();assert.ok(authRedirects.some(x=>x.path==='/auth/v1/recover'&&x.redirectTo==='https://sommaapp.github.io/'))});
+
+  await pass('login errors are visible without opening private screens',async()=>{await page.locator('[data-auth-tab="login"]').first().click();await page.locator('#login-email').fill(user.email);await page.locator('#login-password').fill('wrong-password');await page.locator('#login-form button[type="submit"]').click();await page.locator('#auth-feedback').filter({hasText:'E-mail ou senha incorretos'}).waitFor()});
  await pass('real SDK sign-in loads names and requests through adapter',async()=>{await page.locator('#login-password').fill('QA-Test-Only-Password!');await page.locator('#login-form button[type="submit"]').click();await page.locator('#app-shell').waitFor({state:'visible'});await page.getByText('Olá, Pessoa',{exact:true}).waitFor();assert.equal(await page.getByText('Ana S.',{exact:true}).count(),1)});
  await page.screenshot({path:path.join(output,'somma_home_mobile.png'),fullPage:true});
  await pass('native history returns from details to Ajudar',async()=>{await page.locator('.nav-item[data-view="help"]').click();await page.locator('[data-details="'+rid+'"]').click();assert.equal(await page.locator('#page-title').textContent(),'Pedido');await page.goBack();assert.equal(await page.locator('#page-title').textContent(),'Ajudar')});

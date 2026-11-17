@@ -1,0 +1,169 @@
+name: Apply Supabase migrations on disposable PostgreSQL # includes concurrency regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/migrations-disposable.yml'
+      - 'tests/postgres-rls-real-migrations.integration.sql'
+      - 'tests/postgres-contribution-concurrency.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start disposable PostgreSQL
+        run: |
+          docker network create somma-migrations-test
+          docker run -d --name somma-migrations-pg --network somma-migrations-test -e POSTGRES_PASSWORD=testpass -e POSTGRES_USER=postgres postgres:16
+          for i in {1..30}; do
+            if docker exec somma-migrations-pg pg_isready -U postgres; then break; fi
+            sleep 2
+          done
+          docker exec somma-migrations-pg pg_isready -U postgres
+      - name: Prepare minimal Supabase Auth compatibility layer
+        run: |
+          docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+          CREATE ROLE anon NOLOGIN;
+          CREATE ROLE authenticated NOLOGIN;
+          CREATE ROLE service_role NOLOGIN BYPASSRLS;
+          CREATE SCHEMA auth;
+          CREATE TABLE auth.users (
+            id uuid PRIMARY KEY,
+            raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+            created_at timestamptz NOT NULL DEFAULT now()
+          );
+          CREATE FUNCTION auth.uid() RETURNS uuid
+          LANGUAGE sql STABLE
+          AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+          GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+          GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+          SQL
+      - name: Apply every versioned migration in order
+        run: |
+          set -euo pipefail
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying ${migration}"
+            docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "${migration}"
+          done
+      - name: Verify key RLS objects and privileges
+        run: |
+          docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private' AND p.proname = 'can_read_request'
+            ) THEN
+              RAISE EXCEPTION 'private.can_read_request was not created';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_policies
+              WHERE schemaname = 'public' AND tablename = 'requests'
+                AND policyname = 'requests_read'
+            ) THEN
+              RAISE EXCEPTION 'requests_read policy was not created';
+            END IF;
+            IF NOT (
+              SELECT c.relrowsecurity FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relname = 'requests'
+            ) THEN
+              RAISE EXCEPTION 'RLS is not enabled on public.requests';
+            END IF;
+            IF has_function_privilege('anon', 'private.can_read_request(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'anon unexpectedly can execute private.can_read_request';
+            END IF;
+            IF NOT has_function_privilege('authenticated', 'private.can_read_request(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated cannot execute private.can_read_request';
+            END IF;
+          END $$;
+
+          -- Every public application table must have RLS enabled; anonymous
+          -- users must not receive direct table access to private app data.
+          DO $rls_check$
+          DECLARE t record;
+          BEGIN
+            FOR t IN
+              SELECT c.relname, c.relrowsecurity
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public' AND c.relkind = 'r'
+            LOOP
+              IF NOT t.relrowsecurity THEN
+                RAISE EXCEPTION 'RLS is disabled on public.%', t.relname;
+              END IF;
+              IF has_table_privilege('anon', format('public.%I', t.relname), 'SELECT') THEN
+                RAISE EXCEPTION 'anon has table SELECT on public.%', t.relname;
+              END IF;
+            END LOOP;
+
+            IF has_table_privilege('authenticated', 'public.profiles', 'UPDATE') THEN
+              RAISE EXCEPTION 'authenticated has unexpected table-level UPDATE on profiles';
+            END IF;
+            IF has_table_privilege('authenticated', 'public.contributions', 'UPDATE')
+               OR has_table_privilege('authenticated', 'public.contributions', 'DELETE') THEN
+              RAISE EXCEPTION 'authenticated has unexpected contribution write privileges';
+            END IF;
+            IF has_column_privilege('authenticated', 'public.profiles', 'account_status', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.profiles', 'level', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.profiles', 'request_limit_cents', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.profiles', 'period_limit_cents', 'UPDATE')
+             OR has_column_privilege('authenticated', 'public.profiles', 'public_name', 'UPDATE') THEN
+              RAISE EXCEPTION 'authenticated can update protected profile fields';
+            END IF;
+            IF has_column_privilege('authenticated', 'public.notifications', 'body', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.notifications', 'user_id', 'UPDATE')
+               OR has_column_privilege('authenticated', 'public.notifications', 'title', 'UPDATE') THEN
+              RAISE EXCEPTION 'authenticated can modify protected notification fields';
+            END IF;
+            IF has_function_privilege('anon', 'private.validate_contribution_insert()', 'EXECUTE')
+               OR has_function_privilege('authenticated', 'private.validate_contribution_insert()', 'EXECUTE') THEN
+              RAISE EXCEPTION 'trigger-only contribution validator is directly executable';
+            END IF;
+          END $rls_check$;
+
+          -- Every private SECURITY DEFINER function must pin an empty search_path.
+          -- Only the RLS predicate is callable by authenticated; none are callable by anon.
+          DO $catalog$
+          DECLARE f record;
+          BEGIN
+            FOR f IN
+              SELECT p.oid, p.proname, p.proconfig
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private' AND p.prosecdef AND p.prokind = 'f'
+            LOOP
+              IF NOT coalesce(f.proconfig @> ARRAY['search_path=""']::text[], false) THEN
+                RAISE EXCEPTION 'private SECURITY DEFINER function % does not pin an empty search_path', f.proname;
+              END IF;
+              IF has_function_privilege('anon', f.oid, 'EXECUTE') THEN
+                RAISE EXCEPTION 'anon can execute private SECURITY DEFINER function %', f.proname;
+              END IF;
+              IF f.proname <> 'can_read_request'
+                 AND has_function_privilege('authenticated', f.oid, 'EXECUTE') THEN
+                RAISE EXCEPTION 'authenticated can execute unexpected private SECURITY DEFINER function %', f.proname;
+              END IF;
+            END LOOP;
+
+            IF NOT has_function_privilege('authenticated', 'private.can_read_request(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'authenticated cannot execute private.can_read_request';
+            END IF;
+          END $catalog$;
+          SQL
+      - name: Test two-user isolation against migrated schema
+        run: docker exec -i somma-migrations-pg psql -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/postgres-rls-real-migrations.integration.sql
+      - name: Test concurrent beneficiary monthly limit
+        run: bash tests/postgres-contribution-concurrency.sh
+      - name: Stop disposable containers
+        if: always()
+        run: |
+          docker rm -f somma-migrations-pg || true
+          docker network rm somma-migrations-test || true

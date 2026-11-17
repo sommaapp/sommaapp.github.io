@@ -48,16 +48,52 @@
     return result.data;
   }
 
-  async function allRows(table, build = query => query) {
-    const rows = [];
-    const pageSize = 500;
-    for (let start = 0; ; start += pageSize) {
-      let query = client.from(table).select(COLUMNS[table]);
-      query = build(query).order('created_at', { ascending: false }).order('id', { ascending: false });
-      const page = await unwrap(query.range(start, start + pageSize - 1));
-      rows.push(...page);
-      if (page.length < pageSize) return rows;
+  const PAGE_SIZE = 24;
+
+  function pageFromRows(rows, cursor) {
+    const pageRows = rows.slice(0, PAGE_SIZE);
+    const last = pageRows[pageRows.length - 1];
+    return {
+      rows: pageRows,
+      hasMore: rows.length > PAGE_SIZE,
+      nextCursor: last ? { at: last.created_at, id: last.id } : cursor
+    };
+  }
+
+  function afterCursor(query, cursor) {
+    if (!cursor?.at || !cursor?.id) return query;
+    const at = new Date(cursor.at).toISOString();
+    return query.or(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${cursor.id})`);
+  }
+
+  async function feedPage(userId, cursor = null) {
+    const now = new Date().toISOString();
+    let query = client.from('requests').select(COLUMNS.requests)
+      .eq('status', 'active').neq('user_id', userId);
+    if (cursor?.at && cursor?.id) {
+      const at = new Date(cursor.at).toISOString();
+      query = query.or(`and(expires_at.is.null,created_at.lt.${at}),and(expires_at.is.null,created_at.eq.${at},id.lt.${cursor.id}),and(expires_at.gt.${now},created_at.lt.${at}),and(expires_at.gt.${now},created_at.eq.${at},id.lt.${cursor.id})`);
+    } else {
+      query = query.or(`expires_at.is.null,expires_at.gt.${now}`);
     }
+    query = query.order('created_at', { ascending: false }).order('id', { ascending: false });
+    const rows = await unwrap(query.range(0, PAGE_SIZE));
+    return pageFromRows(rows, cursor);
+  }
+
+  async function notificationPage(userId, cursor = null) {
+    let query = afterCursor(client.from('notifications').select(COLUMNS.notifications).eq('user_id', userId), cursor)
+      .order('created_at', { ascending: false }).order('id', { ascending: false });
+    const result = await query.range(0, PAGE_SIZE);
+    if (result.error) throw result.error;
+    return pageFromRows(result.data || [], cursor);
+  }
+
+  async function historyPage(kind = 'all', cursor = null) {
+    return unwrap(client.rpc('somma_history_page', {
+      p_kind: kind, p_before_at: cursor?.at || null, p_before_id: cursor?.id || null,
+      p_limit: PAGE_SIZE, p_before_kind: cursor?.kind || null
+    }));
   }
 
   async function publicProfiles(ids) {
@@ -69,18 +105,27 @@
   }
 
   async function snapshot(userId) {
-    const [profile, levels, requests, contributions, notifications] = await Promise.all([
+    const [profile, levels, requestsPage, feedSummary, metrics, activeOwn, notificationsPage, unreadResult] = await Promise.all([
       unwrap(client.from('profiles').select(COLUMNS.profiles).eq('id', userId).single()),
       unwrap(client.from('user_levels').select(COLUMNS.user_levels).order('sort_order')),
-      allRows('requests'),
-      allRows('contributions'),
-      allRows('notifications', query => query.eq('user_id', userId))
+      feedPage(userId, null),
+      unwrap(client.rpc('somma_feed_summary')),
+      unwrap(client.rpc('somma_user_summary')),
+      unwrap(client.from('requests').select(COLUMNS.requests).eq('user_id', userId).eq('status', 'active')
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()),
+      notificationPage(userId, null),
+      client.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('read_at', null)
     ]);
-    const profiles = await publicProfiles([
-      ...requests.map(request => request.user_id),
-      ...contributions.map(contribution => contribution.contributor_user_id)
-    ]);
-    return { profile, levels, requests, contributions, notifications, publicProfiles: profiles };
+    if (unreadResult.error) throw unreadResult.error;
+    const requests = requestsPage.rows;
+    const profiles = await publicProfiles([...requests.map(request => request.user_id), feedSummary?.closest?.user_id, feedSummary?.almost?.user_id, activeOwn?.user_id]);
+    return {
+      profile, levels, requests, activeOwn, feedSummary: feedSummary || { active_count: 0, closest: null },
+      metrics: metrics || {}, feedHasMore: requestsPage.hasMore, feedCursor: requestsPage.nextCursor,
+      notifications: notificationsPage.rows,
+      notificationsHasMore: notificationsPage.hasMore, notificationsCursor: notificationsPage.nextCursor,
+      unreadCount: unreadResult.count || 0, history: null, publicProfiles: profiles
+    };
   }
 
   async function findContribution(intent) {
@@ -122,6 +167,11 @@
   window.SommaBackend = Object.freeze({
     client,
     snapshot,
+    feedPage,
+    notificationPage,
+    historyPage,
+    publicProfiles,
+    getRequest: id => unwrap(client.from('requests').select(COLUMNS.requests).eq('id', id).maybeSingle()),
     findContribution,
     contribute,
     createRequest: values => unwrap(client.from('requests').insert({
@@ -134,6 +184,6 @@
     saveName: (userId, name) => unwrap(client.from('profiles').update({ full_name: name })
       .eq('id', userId).select(COLUMNS.profiles).single()),
     markNotificationsRead: userId => unwrap(client.from('notifications').update({ read_at: new Date().toISOString() })
-      .eq('user_id', userId).is('read_at', null).select('id,read_at'))
+      .eq('user_id', userId).is('read_at', null))
   });
 })();
