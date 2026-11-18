@@ -37,7 +37,7 @@
     profiles: 'id,full_name,public_name,level,request_limit_cents,period_limit_cents,account_status,created_at,updated_at',
     public_profiles: 'id,public_name,level,created_at',
     requests: 'id,user_id,category,description,goal_cents,raised_cents,status,starts_at,expires_at,created_at,helper_count,duration_hours',
-    contributions: 'id,request_id,contributor_user_id,amount_cents,platform_fee_cents,status,created_at,idempotency_key',
+    contributions: 'id,request_id,contributor_user_id,amount_cents,platform_fee_cents,status,created_at',
     notifications: 'id,user_id,type,title,body,read_at,created_at',
     user_levels: 'code,display_name,request_limit_cents,period_limit_cents,sort_order,rules'
   });
