@@ -112,6 +112,20 @@ jobs:
                OR has_table_privilege('authenticated', 'public.contributions', 'DELETE') THEN
               RAISE EXCEPTION 'authenticated has unexpected contribution write privileges';
             END IF;
+            IF has_table_privilege('authenticated', 'public.contributions', 'SELECT')
+               OR has_column_privilege('authenticated', 'public.contributions', 'idempotency_key', 'SELECT') THEN
+              RAISE EXCEPTION 'authenticated retains broad or direct SELECT on contribution idempotency key';
+            END IF;
+            IF NOT has_column_privilege('authenticated', 'public.contributions', 'id', 'SELECT')
+               OR NOT has_column_privilege('authenticated', 'public.contributions', 'request_id', 'SELECT')
+               OR NOT has_column_privilege('authenticated', 'public.contributions', 'amount_cents', 'SELECT') THEN
+              RAISE EXCEPTION 'authenticated is missing required contribution result columns';
+            END IF;
+            IF has_function_privilege('anon', 'public.somma_find_own_contribution(uuid)', 'EXECUTE')
+               OR has_function_privilege('service_role', 'public.somma_find_own_contribution(uuid)', 'EXECUTE')
+               OR NOT has_function_privilege('authenticated', 'public.somma_find_own_contribution(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'idempotency lookup RPC execute grants are incorrect';
+            END IF;
             IF has_column_privilege('authenticated', 'public.profiles', 'account_status', 'UPDATE')
                OR has_column_privilege('authenticated', 'public.profiles', 'level', 'UPDATE')
                OR has_column_privilege('authenticated', 'public.profiles', 'request_limit_cents', 'UPDATE')
