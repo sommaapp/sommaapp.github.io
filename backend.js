@@ -129,8 +129,9 @@
   }
 
   async function findContribution(intent) {
-    const contribution = await unwrap(client.from('contributions').select(COLUMNS.contributions)
-      .eq('contributor_user_id', intent.userId).eq('idempotency_key', intent.key).maybeSingle());
+    const contribution = await unwrap(client.rpc('somma_find_own_contribution', {
+      p_idempotency_key: intent.key
+    }));
     if (!contribution) return null;
     if (contribution.request_id !== intent.requestId || contribution.amount_cents !== intent.amountCents) {
       throw { code: 'intent_conflict', message: 'intent_conflict' };
