@@ -58,6 +58,11 @@ async function main(){
    const latest=db.requests.filter(r=>r.user_id===uid).reduce((n,r)=>Math.max(n,Date.parse(r.created_at)),0);
    return respond({supported_requests:new Set(given.map(c=>c.request_id)).size,helped:new Set(given.map(c=>db.requests.find(r=>r.id===c.request_id)?.user_id).filter(Boolean)).size,contributed_cents:given.reduce((n,c)=>n+c.amount_cents,0),received_count:received.length,received_month_cents:received.filter(c=>Date.parse(c.created_at)>=monthStart).reduce((n,c)=>n+c.amount_cents,0),next_request_at:latest?new Date(latest+7*86400000).toISOString():null});
   }
+  if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_find_own_contribution') {
+   const row=db.contributions.find(c=>c.contributor_user_id===uid&&c.idempotency_key===body.p_idempotency_key);
+   if(!row)return respond(null);
+   return respond({id:row.id,request_id:row.request_id,amount_cents:row.amount_cents,platform_fee_cents:row.platform_fee_cents,status:row.status,created_at:row.created_at});
+  }
   if (method === 'POST' && url.pathname === '/rest/v1/rpc/somma_history_page') {
    const events=[];
    for(const r of db.requests.filter(r=>r.user_id===uid&&['all','request'].includes(body.p_kind||'all')))events.push({kind:'request',time:r.created_at,event_id:r.id,request:r,contribution:null,person_id:null});
