@@ -186,6 +186,8 @@ DECLARE
   v_feed jsonb;
   v_history jsonb;
   v_collision_kind text;
+  v_lookup jsonb;
+  v_direct_key_denied boolean := false;
 BEGIN
   v_summary := public.somma_user_summary();
   IF (v_summary->>'helped')::integer <> 1
@@ -239,6 +241,49 @@ BEGIN
      OR v_history->'items'->0->>'event_id' <> '12121212-1212-4121-8121-121212121212'
      OR v_history->'items'->0->>'kind' = v_collision_kind THEN
     RAISE EXCEPTION 'history cursor skipped or duplicated a tied event: %', v_history;
+  END IF;
+
+  -- Alpha can recover their own ambiguous contribution without receiving
+  -- the idempotency token or gaining direct SELECT on that column.
+  v_lookup := public.somma_find_own_contribution('13131313-1313-4131-8131-131313131313');
+  IF v_lookup IS NULL
+     OR v_lookup->>'id' <> '12121212-1212-4121-8121-121212121212'
+     OR v_lookup ? 'idempotency_key' THEN
+    RAISE EXCEPTION 'owner-scoped idempotency lookup returned an invalid projection: %', v_lookup;
+  END IF;
+  IF has_column_privilege('authenticated', 'public.contributions', 'idempotency_key', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.contributions', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated retains direct SELECT access to idempotency key or whole table';
+  END IF;
+  BEGIN
+    PERFORM idempotency_key FROM public.contributions LIMIT 1;
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_direct_key_denied := true;
+  END;
+  IF NOT v_direct_key_denied THEN
+    RAISE EXCEPTION 'authenticated can directly select idempotency_key';
+  END IF;
+
+  -- A different account must not recover Alpha's row even if it guesses the key.
+  PERFORM set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',false);
+  IF public.somma_find_own_contribution('13131313-1313-4131-8131-131313131313') IS NOT NULL THEN
+    RAISE EXCEPTION 'another account can recover a contribution by guessing its idempotency key';
+  END IF;
+  PERFORM set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
+
+  IF has_function_privilege('anon', 'public.somma_find_own_contribution(uuid)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.somma_find_own_contribution(uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.somma_find_own_contribution(uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'idempotency lookup RPC has incorrect execute grants';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'somma_find_own_contribution'
+      AND p.prosecdef
+      AND coalesce(p.proconfig @> ARRAY['search_path=""']::text[], false)
+  ) THEN
+    RAISE EXCEPTION 'idempotency lookup RPC is not SECURITY DEFINER with an empty search_path';
   END IF;
 
   IF EXISTS (
