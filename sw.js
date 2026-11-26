@@ -64,7 +64,7 @@ self.addEventListener('fetch', event => {
     try {
       const response = await fetch(request, { cache: 'no-cache' });
 
-      if (response.ok && (isStaticAsset || cacheableNavigation)) {
+      if (response.ok && ((isStaticAsset && !isNavigation) || cacheableNavigation)) {
         const cache = await caches.open(CACHE);
         await cache.put(request, response.clone());
       }
