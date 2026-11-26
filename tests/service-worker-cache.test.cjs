@@ -2,6 +2,7 @@
 
 // Focused service-worker cache tests. No browser, network, or real user data.
 const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 
@@ -47,7 +48,8 @@ const context = {
     return { ok: true, url: request.url, clone() { return this; } };
   }
 };
-vm.runInNewContext(fs.readFileSync('sw.js', 'utf8'), context);
+const serviceWorkerPath = path.join(__dirname, '..', 'sw.js');
+vm.runInNewContext(fs.readFileSync(serviceWorkerPath, 'utf8'), context);
 
 async function request(url, mode = 'navigate') {
   let responsePromise;
