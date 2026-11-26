@@ -13,6 +13,7 @@ on:
       - 'vendor/**'
       - 'tests/frontend-logic.test.cjs'
       - 'tests/frontend-browser.test.cjs'
+      - 'tests/service-worker-cache.test.cjs'
       - 'tooling/package.json'
       - 'tooling/package-lock.json'
       - '.github/workflows/frontend-tests.yml'
@@ -37,6 +38,8 @@ jobs:
         run: npm ci --prefix tooling --ignore-scripts --no-audit --no-fund
       - name: Run frontend logic tests
         run: npm --prefix tooling run test:logic
+      - name: Run service worker cache tests
+        run: npm --prefix tooling run test:service-worker
       - name: Install Chromium for Playwright
         run: npm --prefix tooling exec -- playwright install --with-deps chromium
       - name: Run browser integration tests
