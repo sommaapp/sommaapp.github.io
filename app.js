@@ -11,6 +11,7 @@
   const INTENT_KEY = 'somma_backend_v1_pending_contribution';
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const initialHash = location.hash;
+  const initialSearch = location.search;
   let legacyCredentialsCleaned = false;
   const state = {
     session: null, data: null, publicProfiles: new Map(), view: 'home', detailId: null,
@@ -447,7 +448,7 @@
       const { data, error } = await backend.client.auth.getSession();
       if (error) throw error;
       await receiveSession(data.session);
-      const authError = new URLSearchParams(initialHash.slice(1)).get('error_code');
+      const authError = new URLSearchParams(initialSearch.slice(1)).get('error_code') || new URLSearchParams(initialHash.slice(1)).get('error_code');
       if (authError && !data.session) feedback('#auth-feedback', errorMessage({ code: authError }));
     } catch (error) { showBoot(errorMessage(error), true); }
   }
