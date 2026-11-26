@@ -11,7 +11,8 @@
     "vendor:sync": "node scripts/vendor-supabase.mjs",
     "vendor:check": "node scripts/vendor-supabase.mjs --check",
     "test:logic": "node ../tests/frontend-logic.test.cjs",
-    "test:browser": "node ../tests/frontend-browser.test.cjs"
+    "test:browser": "node ../tests/frontend-browser.test.cjs",
+    "test:service-worker": "node ../tests/service-worker-cache.test.cjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "2.118.0",

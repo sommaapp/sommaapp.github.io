@@ -48,7 +48,7 @@
       <form id="signup-form" class="auth-form hidden">
         <label class="field">Nome<input id="signup-name" type="text" autocomplete="name" minlength="2" maxlength="120" placeholder="Seu nome" required></label>
         <label class="field">E-mail<input id="signup-email" type="email" autocomplete="email" maxlength="254" placeholder="voce@email.com" required></label>
-        <label class="field">Senha<input id="signup-password" type="password" minlength="8" autocomplete="new-password" placeholder="Pelo menos 8 caracteres" required></label>
+        <label class="field">Senha<input id="signup-password" type="password" minlength="12" autocomplete="new-password" placeholder="Pelo menos 12 caracteres" required></label>
         <label class="check-row"><input id="signup-terms" type="checkbox" required><span>Entendo que esta é uma fase de testes, sem pagamentos reais, e que contribuições voluntárias não constituem empréstimo nem promessa de retorno.</span></label>
         <button class="btn btn-primary full" type="submit">Criar conta</button>
       </form>
@@ -63,13 +63,14 @@
 
       <form id="recovery-form" class="auth-form hidden">
         <h2>Defina sua nova senha</h2>
-        <label class="field">Nova senha<input id="recovery-password" type="password" minlength="8" autocomplete="new-password" placeholder="Pelo menos 8 caracteres" required></label>
-        <label class="field">Repita a nova senha<input id="recovery-confirm" type="password" minlength="8" autocomplete="new-password" required></label>
+        <label class="field">Nova senha<input id="recovery-password" type="password" minlength="12" autocomplete="new-password" placeholder="Pelo menos 12 caracteres" required></label>
+        <label class="field">Repita a nova senha<input id="recovery-confirm" type="password" minlength="12" autocomplete="new-password" required></label>
         <button class="btn btn-primary full" type="submit">Salvar nova senha</button>
         <button class="btn btn-secondary full top-gap" type="button" id="cancel-recovery">Sair</button>
       </form>
 
       <button id="resend-confirmation" type="button" class="btn btn-secondary full top-gap hidden">Reenviar e-mail de confirmação</button>
+      <button id="confirmed-signup-login" type="button" data-auth-tab="login" class="btn btn-secondary full top-gap hidden">Já confirmei o e-mail — entrar</button>
       <p class="tiny muted center">Seu cadastro antigo de demonstração era apenas local. Crie uma conta para usar esta versão.</p>
     </div>
   </section>

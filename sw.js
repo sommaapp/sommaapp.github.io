@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'somma-app-backend-v1.1';
+const CACHE = 'somma-app-backend-v1.2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -56,22 +56,30 @@ self.addEventListener('fetch', event => {
   const isStaticAsset = STATIC_PATHS.has(url.pathname);
   if (!isNavigation && !isStaticAsset) return;
 
+  // Authentication callbacks can return one-time credentials in the query
+  // string (for example, a PKCE ?code=...). Never persist those request URLs.
+  const cacheableNavigation = isNavigation && !url.search;
+
   event.respondWith((async () => {
     try {
       const response = await fetch(request, { cache: 'no-cache' });
 
-      if (response.ok && (isNavigation || isStaticAsset)) {
+      if (response.ok && ((isStaticAsset && !isNavigation) || cacheableNavigation)) {
         const cache = await caches.open(CACHE);
         await cache.put(request, response.clone());
       }
 
       return response;
     } catch (error) {
-      const cached = await caches.match(request, { ignoreSearch: true });
-      if (cached) return cached;
+      // Do not match a callback URL against a cached navigation entry. Fall
+      // through to the clean application shell instead.
+      if (!(isNavigation && url.search)) {
+        const cached = await caches.match(request, { ignoreSearch: true });
+        if (cached) return cached;
+      }
 
       // Any same-origin navigation can fall back to the cached application
-      // shell, including installed-PWA launches that resolve to '/'.
+      // shell, including authentication callbacks and installed-PWA launches.
       if (isNavigation) {
         const shell =
           await caches.match('./index.html', { ignoreSearch: true }) ||
